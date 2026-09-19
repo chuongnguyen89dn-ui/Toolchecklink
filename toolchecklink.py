@@ -2,15 +2,14 @@ import argparse,json,re,time
 from datetime import datetime,timezone
 from pathlib import Path
 from urllib.parse import urlparse
-import requests
 from playwright.sync_api import sync_playwright
+from engines.hls_inspector import inspect_hls
+from engines.external_resolvers import yt_dlp_probe,streamlink_probe
+from engines.report_contract import envelope
 
 MEDIA_RE=re.compile(r"(\.m3u8(?:\?|$)|\.mpd(?:\?|$)|\.(?:mp4|webm|m4v|mov)(?:\?|$))",re.I)
 MIMES=("mpegurl","dash+xml","video/","audio/")
-SENSITIVE={"cookie","authorization","proxy-authorization"}
-
-def safe_headers(h):
-    return {k:("<redacted>" if k.lower() in SENSITIVE else v) for k,v in (h or {}).items()}
+SAFE=("referer","origin","user-agent")
 
 def kind(url,ct=""):
     s=(url+" "+ct).lower()
@@ -19,64 +18,72 @@ def kind(url,ct=""):
     if any(x in s for x in (".mp4",".webm",".m4v",".mov","video/")):return "direct"
     return "media"
 
-def verify(c):
-    raw=c.get("_raw_headers",{})
-    headers={k:v for k,v in raw.items() if k.lower() in ("referer","origin","user-agent")}
-    out={"ok":False,"status":None,"content_type":None,"manifest":None,"note":None}
-    try:
-        r=requests.get(c["url"],headers=headers,timeout=12,stream=True,allow_redirects=True)
-        out["status"]=r.status_code;out["content_type"]=r.headers.get("content-type")
-        out["ok"]=200<=r.status_code<300
-        if c["type"] in ("hls","dash") and out["ok"]:
-            sample=r.raw.read(8192).decode("utf-8","ignore")
-            out["manifest"]=sample.startswith("#EXTM3U") if c["type"]=="hls" else ("<MPD" in sample or "<mpd" in sample)
-            out["ok"]=out["ok"] and out["manifest"]
-        r.close()
-    except Exception as e:out["note"]=str(e)
-    return out
+def launch_browser(p,headless):
+    try:return p.chromium.launch(channel="msedge",headless=headless)
+    except Exception:return p.chromium.launch(headless=headless)
 
 def scan(url,wait=20,headless=False):
-    found={};frames=[]
+    found={};frames=[];errors=[]
     def add(u,source,ct="",headers=None,status=None):
         if not u or not (MEDIA_RE.search(u) or any(x in (ct or "").lower() for x in MIMES)):return
-        if u not in found:
-            found[u]={"url":u,"type":kind(u,ct),"source":[source],"content_type":ct or None,"status_seen":status,
-                      "headers":safe_headers(headers),"_raw_headers":headers or {}}
-        elif source not in found[u]["source"]:found[u]["source"].append(source)
+        safe={k:v for k,v in (headers or {}).items() if k.lower() in SAFE}
+        c=found.setdefault(u,{"url":u,"type":kind(u,ct),"detectedBy":[],"contentType":ct or None,"statusSeen":status,"requestContext":safe})
+        if source not in c["detectedBy"]:c["detectedBy"].append(source)
+        if status is not None:c["statusSeen"]=status
     with sync_playwright() as p:
-        browser=p.chromium.launch(headless=headless)
-        context=browser.new_context()
-        page=context.new_page()
+        browser=launch_browser(p,headless);context=browser.new_context();page=context.new_page()
         page.on("request",lambda req:add(req.url,"network-request","",req.headers))
-        def response(resp):
+        def on_response(resp):
             try:add(resp.url,"network-response",resp.headers.get("content-type",""),resp.request.headers,resp.status)
-            except Exception:pass
-        page.on("response",response)
-        page.goto(url,wait_until="domcontentloaded",timeout=60000)
+            except Exception as e:errors.append("response: "+str(e))
+        page.on("response",on_response)
+        try:page.goto(url,wait_until="domcontentloaded",timeout=60000)
+        except Exception as e:errors.append("navigation: "+str(e))
         end=time.time()+wait
         while time.time()<end:
             try:
-                for u in page.eval_on_selector_all("video,source","els=>els.map(e=>e.currentSrc||e.src).filter(Boolean)"):add(u,"dom")
-                frames=list(dict.fromkeys(f.url for f in page.frames if f.url and f.url!="about:blank"))
-                for u in page.evaluate("performance.getEntriesByType('resource').map(e=>e.name)"):add(u,"performance")
-                page.evaluate("()=>document.querySelectorAll('video').forEach(v=>{try{v.muted=true;v.play().catch(()=>{})}catch(e){}})")
-            except Exception:pass
+                for f in page.frames:
+                    if f.url and f.url!="about:blank":
+                        if f.url not in frames:frames.append(f.url)
+                    try:
+                        for u in f.eval_on_selector_all("video,source","els=>els.map(e=>e.currentSrc||e.src).filter(Boolean)"):add(u,"dom")
+                        for u in f.evaluate("performance.getEntriesByType('resource').map(e=>e.name)"):add(u,"performance")
+                        f.evaluate("()=>document.querySelectorAll('video').forEach(v=>{try{v.muted=true;v.play().catch(()=>{})}catch(e){}})")
+                    except Exception:pass
+            except Exception as e:errors.append("scan: "+str(e))
             page.wait_for_timeout(1000)
-        title=page.title();final_url=page.url
+        try:title=page.title();final_url=page.url
+        except Exception:title="";final_url=url
         browser.close()
-    candidates=[]
+    items=[]
     for c in found.values():
-        c["verification"]=verify(c);c.pop("_raw_headers",None);candidates.append(c)
-    candidates.sort(key=lambda c:(not c["verification"]["ok"],{"hls":0,"dash":1,"direct":2}.get(c["type"],3)))
-    return {"schema_version":"1.0","generated_at":datetime.now(timezone.utc).isoformat(),"input_url":url,
-            "final_url":final_url,"title":title,"frames":frames,"candidate_count":len(candidates),
-            "verified_count":sum(c["verification"]["ok"] for c in candidates),"candidates":candidates}
+        if c["type"]=="hls":
+            c["verification"]=inspect_hls(c["url"],c.get("requestContext") or {})
+        else:
+            c["verification"]={"manifest_status":c.get("statusSeen"),"variant_status":None,"segment_status":None,"playable":False}
+        items.append(c)
+    items.sort(key=lambda x:({"hls":0,"dash":1,"direct":2}.get(x["type"],3),x["url"]))
+    engines={"yt-dlp":yt_dlp_probe(url),"streamlink":streamlink_probe(url)}
+    report=envelope(url,items,engines)
+    report["page"]={"finalUrl":final_url,"title":title,"frames":frames,"errors":errors}
+    return report
+
+def save_report(report,url,outdir="reports"):
+    root=Path(outdir);root.mkdir(parents=True,exist_ok=True)
+    stamp=datetime.now().strftime("%Y%m%d_%H%M%S")
+    host=urlparse(url).netloc.replace(":","_") or "site"
+    path=root/f"toolchecklink_{host}_{stamp}.json"
+    payload=json.dumps(report,ensure_ascii=False,indent=2)
+    path.write_text(payload,encoding="utf-8")
+    (root/"latest.json").write_text(payload,encoding="utf-8")
+    return path
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument("url",nargs="?");ap.add_argument("--wait",type=int,default=20);ap.add_argument("--headless",action="store_true")
-    a=ap.parse_args();url=a.url or input("URL: ").strip();report=scan(url,a.wait,a.headless)
-    host=urlparse(url).netloc.replace(":","_") or "site"
-    out=Path(f"toolchecklink_{host}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
-    out.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
-    print(f"JSON: {out.resolve()}");print(f"Candidates: {report['candidate_count']} | Verified: {report['verified_count']}")
+    ap=argparse.ArgumentParser(description="Toolchecklink media discovery and verification")
+    ap.add_argument("url",nargs="?");ap.add_argument("--wait",type=int,default=20);ap.add_argument("--headless",action="store_true");ap.add_argument("--outdir",default="reports")
+    a=ap.parse_args()
+    if not a.url:
+        ap.print_help();return
+    report=scan(a.url,a.wait,a.headless);out=save_report(report,a.url,a.outdir)
+    s=report["summary"];print(f"JSON: {out.resolve()}");print(f"Candidates: {s['candidates']} | Verified: {s['verified']} | Playable: {s['playable']}")
 if __name__=="__main__":main()

@@ -12,8 +12,17 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt
-      - run: python -m playwright install chromium
-      - run: pyinstaller --noconfirm --onefile --name Toolchecklink toolchecklink.py
+      - name: Install Chromium fallback
+        run: python -m playwright install chromium
+      - name: Source smoke test
+        run: python toolchecklink.py --help
+      - name: Build integrated EXE
+        run: pyinstaller --noconfirm --onefile --collect-all playwright --name Toolchecklink toolchecklink.py
+      - name: Packaged EXE smoke test
+        shell: pwsh
+        run: |
+          .\dist\Toolchecklink.exe --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
           name: Toolchecklink-Windows
