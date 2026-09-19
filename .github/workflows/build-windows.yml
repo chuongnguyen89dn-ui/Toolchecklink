@@ -22,17 +22,20 @@ jobs:
       - name: Source smoke test
         run: |
           python toolchecklink.py --help
+          python -m py_compile toolchecklink_gui.py
           ffprobe -version
           yt-dlp --version
           streamlink --version
-      - name: Build integrated EXE
-        run: pyinstaller --noconfirm --onefile --collect-all playwright --name Toolchecklink toolchecklink.py
-      - name: Packaged EXE smoke test
+      - name: Build GUI EXE
+        run: pyinstaller --noconfirm --onefile --windowed --collect-all playwright --name Toolchecklink toolchecklink_gui.py
+      - name: Verify packaged EXE exists
         shell: pwsh
         run: |
-          .\dist\Toolchecklink.exe --help
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (!(Test-Path .\dist\Toolchecklink.exe)) { exit 1 }
+          $size=(Get-Item .\dist\Toolchecklink.exe).Length
+          if ($size -lt 1000000) { exit 1 }
+          Write-Host "GUI EXE bytes: $size"
       - uses: actions/upload-artifact@v4
         with:
-          name: Toolchecklink-Windows
+          name: Toolchecklink-Windows-GUI
           path: dist/Toolchecklink.exe
