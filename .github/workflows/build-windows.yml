@@ -14,8 +14,17 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Install Chromium fallback
         run: python -m playwright install chromium
+      - name: Install FFmpeg
+        shell: pwsh
+        run: choco install ffmpeg -y --no-progress
+      - name: Install resolver CLIs
+        run: pip install yt-dlp streamlink
       - name: Source smoke test
-        run: python toolchecklink.py --help
+        run: |
+          python toolchecklink.py --help
+          ffprobe -version
+          yt-dlp --version
+          streamlink --version
       - name: Build integrated EXE
         run: pyinstaller --noconfirm --onefile --collect-all playwright --name Toolchecklink toolchecklink.py
       - name: Packaged EXE smoke test
