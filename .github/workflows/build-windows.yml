@@ -12,7 +12,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt
-      - name: Install Chromium fallback
+      - name: Install Toolchecklink Chromium
         run: python -m playwright install chromium
       - name: Install FFmpeg
         shell: pwsh
@@ -37,5 +37,5 @@ jobs:
           Write-Host "GUI EXE bytes: $size"
       - uses: actions/upload-artifact@v4
         with:
-          name: Toolchecklink-Windows-GUI
+          name: Toolchecklink-Windows-GUI-Chromium
           path: dist/Toolchecklink.exe

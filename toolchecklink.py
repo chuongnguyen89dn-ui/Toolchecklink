@@ -49,7 +49,11 @@ def scan(url,wait=25,headless=False):
   if status is not None:c["statusSeen"]=status
   if c["type"] in ("hls","dash") and status and 200<=status<300:c["browserEvidence"]["manifestSeen"]=True
  with sync_playwright() as p:
-  browser=launch_browser(p,headless);context=browser.new_context();page=context.new_page()
+  browser=launch_browser(p,headless);context=browser.new_context()
+  # Close unsolicited popup/new-tab pages while preserving the instrumented main page and its frames.
+  opened=[]
+  context.on("page",lambda pg: opened.append(pg))
+  page=context.new_page()
   page.on("request",lambda req:add(req.url,"network-request","",req.headers))
   def on_response(resp):
    try:add(resp.url,"network-response",resp.headers.get("content-type",""),resp.request.headers,resp.status)
