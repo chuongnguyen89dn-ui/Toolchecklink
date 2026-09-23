@@ -19,8 +19,17 @@ def kind(url,ct=""):
  return "media"
 
 def launch_browser(p,headless):
- try:return p.chromium.launch(channel="msedge",headless=headless)
- except Exception:return p.chromium.launch(headless=headless)
+ # Prefer the Chromium shipped beside Toolchecklink.exe. Never select Edge.
+ import os,sys
+ roots=[]
+ if getattr(sys,"frozen",False): roots.append(Path(sys.executable).resolve().parent/"pw-browsers")
+ roots += [Path(__file__).resolve().parent/"pw-browsers",Path.cwd()/"pw-browsers"]
+ for root in roots:
+  if root.exists():
+   for exe in root.rglob("chrome.exe"):
+    if "chromium" in str(exe).lower() or "chrome-win" in str(exe).lower():
+     return p.chromium.launch(executable_path=str(exe),headless=headless,args=["--autoplay-policy=no-user-gesture-required","--disable-notifications"])
+ raise RuntimeError("Toolchecklink Chromium not found beside the EXE. Re-extract the full portable ZIP.")
 
 def ffprobe_probe(url,headers=None):
  exe=shutil.which("ffprobe")

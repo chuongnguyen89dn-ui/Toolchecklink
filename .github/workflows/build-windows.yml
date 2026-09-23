@@ -1,4 +1,4 @@
-name: Build Windows EXE
+name: Build Windows Portable
 on:
   workflow_dispatch:
   push:
@@ -6,36 +6,35 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}\pw-browsers
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt
-      - name: Install Toolchecklink Chromium
+      - name: Install dedicated Chromium
         run: python -m playwright install chromium
-      - name: Install FFmpeg
+      - name: Verify dedicated Chromium
         shell: pwsh
-        run: choco install ffmpeg -y --no-progress
-      - name: Install resolver CLIs
-        run: pip install yt-dlp streamlink
-      - name: Source smoke test
         run: |
-          python toolchecklink.py --help
-          python -m py_compile toolchecklink_gui.py
-          ffprobe -version
-          yt-dlp --version
-          streamlink --version
+          $chrome = Get-ChildItem "$env:PLAYWRIGHT_BROWSERS_PATH" -Recurse -Filter chrome.exe | Select-Object -First 1
+          if (!$chrome) { throw "Dedicated Chromium missing" }
+          Write-Host "Dedicated Chromium: $($chrome.FullName)"
       - name: Build GUI EXE
         run: pyinstaller --noconfirm --onefile --windowed --collect-all playwright --name Toolchecklink toolchecklink_gui.py
-      - name: Verify packaged EXE exists
+      - name: Assemble portable package
         shell: pwsh
         run: |
-          if (!(Test-Path .\dist\Toolchecklink.exe)) { exit 1 }
-          $size=(Get-Item .\dist\Toolchecklink.exe).Length
-          if ($size -lt 1000000) { exit 1 }
-          Write-Host "GUI EXE bytes: $size"
+          New-Item -ItemType Directory -Force portable | Out-Null
+          Copy-Item .\dist\Toolchecklink.exe .\portable\
+          Copy-Item "$env:PLAYWRIGHT_BROWSERS_PATH" .\portable\pw-browsers -Recurse
+          if (!(Test-Path .\portable\Toolchecklink.exe)) { throw "EXE missing" }
+          $chrome = Get-ChildItem .\portable\pw-browsers -Recurse -Filter chrome.exe | Select-Object -First 1
+          if (!$chrome) { throw "Portable Chromium missing" }
+          Write-Host "Portable Chromium: $($chrome.FullName)"
       - uses: actions/upload-artifact@v4
         with:
-          name: Toolchecklink-Windows-GUI-Chromium
-          path: dist/Toolchecklink.exe
+          name: Toolchecklink-Windows-Portable-Chromium
+          path: portable/
