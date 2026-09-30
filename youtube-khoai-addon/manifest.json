@@ -1,0 +1,23 @@
+{
+  "id": "vn.ivyplay.youtube.khoailangthang",
+  "version": "1.0.0",
+  "name": "Khoai Lang Thang YouTube",
+  "description": "Khoai Lang Thang YouTube catalog for Nuvio/IvyPlay",
+  "resources": [
+    "catalog"
+  ],
+  "types": [
+    "movie"
+  ],
+  "catalogs": [
+    {
+      "type": "movie",
+      "id": "khoai-lang-thang",
+      "name": "Khoai Lang Thang"
+    }
+  ],
+  "behaviorHints": {
+    "adult": false,
+    "p2pNotSupported": true
+  }
+}
