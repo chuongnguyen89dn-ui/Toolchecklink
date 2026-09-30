@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "postinstall": "python3 -m pip install -U yt-dlp bgutil-ytdlp-pot-provider && (test -d bgutil-pot || git clone --depth 1 --branch 2.0.0 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git bgutil-pot) && cd bgutil-pot/server && npm ci --include=dev && ./node_modules/.bin/tsc"
+    "postinstall": "python3 -m pip install -U yt-dlp bgutil-ytdlp-pot-provider && (test -d bgutil-pot || git clone --depth 1 --branch 2.0.0 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git bgutil-pot) && cd bgutil-pot/server && npm_config_omit='' npm ci && ./node_modules/.bin/tsc"
   },
   "dependencies": {
     "express": "^4.21.2",
