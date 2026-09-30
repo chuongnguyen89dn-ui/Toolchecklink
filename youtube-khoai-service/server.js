@@ -18,7 +18,15 @@ app.get("/stream/movie/:id.json",(q,r)=>{const id=q.params.id.startsWith("khoai_
 async function resolveYouTube(id){
   if(!/^[A-Za-z0-9_-]{11}$/.test(id)) throw new Error("invalid video id");
   const url="https://www.youtube.com/watch?v="+id;
-  const args=["--no-playlist","--skip-download","--no-warnings","--extractor-args","youtube:player_client=web_safari","-f","best[protocol*=m3u8]/best","-g",url];
+  const args=[
+    "--no-playlist","--skip-download","--no-warnings",
+    "--plugin-dirs",__dirname+"/bgutil-ytdlp-pot-provider/plugin",
+    "--js-runtimes","node",
+    "--remote-components","ejs:github",
+    "--extractor-args","youtube:player_client=mweb",
+    "--extractor-args","youtubepot-bgutilscript:server_home="+__dirname+"/bgutil-ytdlp-pot-provider/server",
+    "-f","best[protocol*=m3u8]/best","-g",url
+  ];
   const {stdout}=await execFileAsync(__dirname+"/yt-dlp",args,{timeout:30000,maxBuffer:1024*1024});
   const media=stdout.trim().split(/\r?\n/).filter(Boolean)[0];
   if(!media) throw new Error("no media url");
