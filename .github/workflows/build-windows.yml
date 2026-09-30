@@ -3,6 +3,12 @@ on:
   workflow_dispatch:
   push:
     branches: [main, master]
+    paths:
+      - 'toolchecklink.py'
+      - 'toolchecklink_gui.py'
+      - 'engines/**'
+      - 'requirements.txt'
+      - '.github/workflows/build-windows.yml'
 jobs:
   build:
     runs-on: windows-latest
@@ -10,6 +16,13 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}\pw-browsers
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            toolchecklink.py
+            toolchecklink_gui.py
+            engines
+            requirements.txt
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -33,7 +46,6 @@ jobs:
           if (!(Test-Path .\portable\Toolchecklink.exe)) { throw "EXE missing" }
           $chrome = Get-ChildItem .\portable\pw-browsers -Recurse -Filter chrome.exe | Select-Object -First 1
           if (!$chrome) { throw "Portable Chromium missing" }
-          Write-Host "Portable Chromium: $($chrome.FullName)"
       - uses: actions/upload-artifact@v4
         with:
           name: Toolchecklink-Windows-Portable-Chromium
