@@ -56,8 +56,24 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add youtube-khoai/catalog.json youtube-khoai/catalog.csv
-          git diff --cached --quiet || git commit -m "Update Khoai Lang Thang YouTube catalog"
-          git push
+          if git diff --cached --quiet; then
+            echo "Catalog unchanged; nothing to commit."
+            exit 0
+          fi
+          git commit -m "Update Khoai Lang Thang YouTube catalog"
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then
+              echo "Catalog push succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "Push raced with another commit; retrying ($attempt/3)"
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 2))
+          done
+          echo "Catalog push failed after 3 attempts"
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: khoai-lang-thang-youtube-catalog
