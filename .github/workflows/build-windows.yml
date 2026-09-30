@@ -15,14 +15,17 @@ jobs:
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}\pw-browsers
     steps:
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            toolchecklink.py
-            toolchecklink_gui.py
-            engines
-            requirements.txt
-          sparse-checkout-cone-mode: false
+      - name: Download build sources only
+        shell: pwsh
+        run: |
+          $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}"
+          Invoke-WebRequest "$base/toolchecklink.py" -OutFile toolchecklink.py
+          Invoke-WebRequest "$base/toolchecklink_gui.py" -OutFile toolchecklink_gui.py
+          Invoke-WebRequest "$base/requirements.txt" -OutFile requirements.txt
+          New-Item -ItemType Directory -Force engines | Out-Null
+          @("README.md","__init__.py","external_resolvers.py","hls_inspector.py","report_contract.py") | ForEach-Object {
+            Invoke-WebRequest "$base/engines/$_" -OutFile "engines/$_"
+          }
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -34,7 +37,6 @@ jobs:
         run: |
           $chrome = Get-ChildItem "$env:PLAYWRIGHT_BROWSERS_PATH" -Recurse -Filter chrome.exe | Select-Object -First 1
           if (!$chrome) { throw "Dedicated Chromium missing" }
-          Write-Host "Dedicated Chromium: $($chrome.FullName)"
       - name: Build GUI EXE
         run: pyinstaller --noconfirm --onefile --windowed --collect-all playwright --name Toolchecklink toolchecklink_gui.py
       - name: Assemble portable package
