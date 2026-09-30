@@ -3,7 +3,14 @@
   "version": "3.0.0",
   "private": true,
   "main": "server.js",
-  "scripts": {"start": "node server.js"},
-  "dependencies": {"express": "^4.21.2"},
-  "engines": {"node": ">=22"}
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "youtubei.js": "^16.0.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
 }
