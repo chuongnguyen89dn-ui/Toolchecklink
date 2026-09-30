@@ -1,10 +1,28 @@
 {
   "id": "vn.ivyplay.youtube.khoailangthang",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Khoai Lang Thang YouTube",
   "description": "Khoai Lang Thang YouTube catalog for Nuvio/IvyPlay",
   "resources": [
-    "catalog"
+    "catalog",
+    {
+      "name": "meta",
+      "types": [
+        "movie"
+      ],
+      "idPrefixes": [
+        "yt:"
+      ]
+    },
+    {
+      "name": "stream",
+      "types": [
+        "movie"
+      ],
+      "idPrefixes": [
+        "yt:"
+      ]
+    }
   ],
   "types": [
     "movie"
@@ -19,5 +37,8 @@
   "behaviorHints": {
     "adult": false,
     "p2pNotSupported": true
-  }
+  },
+  "idPrefixes": [
+    "yt:"
+  ]
 }
