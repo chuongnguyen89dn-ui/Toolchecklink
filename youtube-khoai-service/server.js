@@ -10,12 +10,40 @@ const cache=new Map(), inFlight=new Map(), autoState=new Map();
 app.use((req,res,next)=>{res.set("Access-Control-Allow-Origin","*");console.log("[REQ]",req.method,req.originalUrl);next()});
 const metas=catalog.map(x=>({id:"khoai_"+x.videoId,type:"movie",name:x.title,poster:"https://i.ytimg.com/vi/"+x.videoId+"/hqdefault.jpg",posterShape:"landscape",background:"https://i.ytimg.com/vi/"+x.videoId+"/maxresdefault.jpg",description:"Khoai Lang Thang / Food & Travel",runtime:x.duration?Math.round(x.duration/60)+" min":undefined}));
 const byId=new Map(metas.map(x=>[x.id,x]));
-const manifest={id:"vn.ivyplay.youtube.khoailangthang",version:"3.7.3",name:"Khoai Lang Thang YouTube",description:"Direct CDN playback: Render resolves then redirects; media does not proxy through Render.",resources:["catalog",{name:"meta",types:["movie"],idPrefixes:["khoai_"]},{name:"stream",types:["movie"],idPrefixes:["khoai_"]}],types:["movie"],idPrefixes:["khoai_"],catalogs:[{type:"movie",id:"khoai-lang-thang",name:"Khoai Lang Thang"}],behaviorHints:{adult:false,p2pNotSupported:true}};
+const manifest={id:"vn.ivyplay.youtube.khoailangthang",version:"3.8.0",name:"Khoai Lang Thang YouTube",description:"Direct CDN playback: Render resolves then redirects; media does not proxy through Render.",resources:["catalog",{name:"meta",types:["movie"],idPrefixes:["khoai_"]},{name:"stream",types:["movie"],idPrefixes:["khoai_"]}],types:["movie"],idPrefixes:["khoai_"],catalogs:[{type:"movie",id:"khoai-lang-thang",name:"Khoai Lang Thang"}],behaviorHints:{adult:false,p2pNotSupported:true}};
 function timeout(ms){return AbortSignal.timeout(ms)}
 function decrypt(enc){const raw=Buffer.from(String(enc).replace(/\s/g,""),"base64"),iv=raw.subarray(0,16);const d=crypto.createDecipheriv("aes-128-cbc",KEY,iv);return JSON.parse(Buffer.concat([d.update(raw.subarray(16)),d.final()]).toString("utf8"))}
 async function cdn(){for(const ep of DISCOVERY){try{const r=await fetch(ep,{headers:{"User-Agent":UA,Accept:"application/json",Origin:"https://yt.savetube.me",Referer:"https://yt.savetube.me/"},signal:timeout(5000)});const j=await r.json();if(r.ok&&j?.cdn)return j.cdn}catch(e){console.log("[CDN-MISS]",ep,String(e))}}throw Error("No SaveTube CDN")}
 async function context(id){const c=await cdn(),base="https://"+c,h={"Content-Type":"application/json",Accept:"application/json","User-Agent":UA,Origin:"https://yt.savetube.me",Referer:"https://yt.savetube.me/"};const r=await fetch(base+"/v2/info",{method:"POST",headers:h,body:JSON.stringify({url:"https://www.youtube.com/watch?v="+id}),signal:timeout(12000)});const j=await r.json();if(!r.ok||!j?.data)throw Error("SaveTube info "+r.status);return{base,h,info:decrypt(j.data),cdn:c}}
 async function resolveQuality(id,q){const key=id+":"+q,hit=cache.get(key);if(hit&&hit.expires>Date.now())return hit;if(inFlight.has(key))return inFlight.get(key);const p=(async()=>{const c=await context(id);const r=await fetch(c.base+"/download",{method:"POST",headers:c.h,body:JSON.stringify({id,downloadType:"video",quality:q,key:c.info.key}),signal:timeout(12000)});const t=await r.text();let j;try{j=JSON.parse(t)}catch{}const data=j?.data||{};const url=data.downloadUrl||data.url||j?.downloadUrl;if(!r.ok||!url)throw Error("SaveTube download "+r.status);const reported=String(data.quality||data.resolution||data.height||q).replace(/p$/i,"");const v={url,quality:q,reportedQuality:reported,cdn:c.cdn,expires:Date.now()+90*60*1000};cache.set(key,v);console.log("[RESOLVED]",id,"requested="+q+"p","reported="+reported+"p",c.cdn);return v})().finally(()=>inFlight.delete(key));inFlight.set(key,p);return p}
+
+const SP_SECRET="487587d398cc3673d2cb6efbc78b77e761b6e637a192001d9f5766b61a7a1f5d";
+const SP_TS="1788367131556";
+function spCookies(headers){
+  const a=typeof headers.getSetCookie==="function"?headers.getSetCookie():[headers.get("set-cookie")||""];
+  return a.map(x=>x.split(";")[0]).filter(Boolean).join("; ");
+}
+async function socialPlug(id){
+  const started=Date.now(),sf_url="https://www.youtube.com/watch?v="+id;
+  const home=await fetch("https://socialplug.to/vi/",{headers:{"User-Agent":UA,Accept:"text/html"},signal:timeout(10000)});
+  const cookie=spCookies(home.headers); if(!home.ok)throw Error("SocialPlug home "+home.status);
+  const xs=decodeURIComponent((cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/)||[])[1]||"");
+  const common={"User-Agent":UA,Accept:"application/json, text/plain, */*","X-Requested-With":"XMLHttpRequest",Referer:"https://socialplug.to/vi/",Origin:"https://socialplug.to",Cookie:cookie};
+  if(xs)common["X-XSRF-TOKEN"]=xs;
+  const mr=await fetch("https://socialplug.to/msec",{headers:common,signal:timeout(8000)});
+  if(!mr.ok)throw Error("SocialPlug msec "+mr.status);
+  const ts=Date.now(),sig=crypto.createHash("sha256").update(sf_url+ts+SP_SECRET).digest("hex");
+  const body=new URLSearchParams({sf_url,ts:String(ts),_ts:SP_TS,_tsc:"0",_s:sig});
+  const cr=await fetch("https://socialplug.to/api/convert",{method:"POST",headers:{...common,"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8"},body,signal:timeout(15000)});
+  const text=await cr.text(); let j;try{j=JSON.parse(text)}catch{}
+  if(!cr.ok||!j?.id)throw Error("SocialPlug convert "+cr.status+" "+text.slice(0,120));
+  const urls=Array.isArray(j.url)?j.url:[];
+  const muxed=urls.filter(x=>x.url&&x.audio!==false&&x.no_audio!==true).sort((a,b)=>(b.qualityNumber||0)-(a.qualityNumber||0));
+  const mp4=j?.meta?.stream?.mp4||{};
+  console.log("[SOCIALPLUG-OK]",id,"ms="+(Date.now()-started),"qualities="+(j.video_quality||[]).join(","),"muxed="+muxed.length);
+  return {provider:"socialplug",ms:Date.now()-started,id:j.id,title:j.meta?.title,video_quality:j.video_quality||[],muxed:muxed.map(x=>({quality:x.qualityNumber||x.quality,itag:x.itag,url:x.url})),local:Object.fromEntries(Object.entries(mp4).map(([q,v])=>[q,{quality:v.quality,streams:v.streams||[]}]))};
+}
+app.get("/socialplug/:id",async(q,r)=>{try{const x=await socialPlug(q.params.id);r.set("Cache-Control","no-store");r.json(x)}catch(e){console.error("[SOCIALPLUG-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}});
 async function resolveAuto(id){
   // Fast-start: give HD a short head start, without sequential 4K timeouts.
   // This endpoint returns one progressive URL; true mid-play ABR requires HLS/DASH/player support.
@@ -30,7 +58,7 @@ app.get("/play/:id/:quality.mp4",async(q,r)=>{try{const quality=String(q.params.
 app.get("/catalog/movie/khoai-lang-thang.json",(_,r)=>r.json({metas}));
 app.get("/catalog/movie/khoai-lang-thang/:extra.json",(_,r)=>r.json({metas}));
 app.get("/meta/movie/:id.json",(q,r)=>{const m=byId.get(q.params.id);return m?r.json({meta:m}):r.status(404).json({meta:null})});
-app.get("/stream/movie/:id.json",(q,r)=>{const id=q.params.id.startsWith("khoai_")?q.params.id.slice(6):"";return id?r.json({streams:[{name:"YouTube • AUTO",title:"AUTO fallback on player retry",url:`${q.protocol}://${q.get("host")}/ytplay/${id}`,behaviorHints:{notWebReady:true}}]}):r.json({streams:[]})});
+app.get("/stream/movie/:id.json",(q,r)=>{const id=q.params.id.startsWith("khoai_")?q.params.id.slice(6):"";return id?r.json({streams:[{name:"YouTube • AUTO",title:"Fast progressive playback",url:`${q.protocol}://${q.get("host")}/play/${id}/auto.mp4`,behaviorHints:{notWebReady:true}}]}):r.json({streams:[]})});
 let ytDirectPromise;
 async function ytDirect(){
   if(!ytDirectPromise)ytDirectPromise=import("youtubei.js").then(async m=>m.Innertube.create({retrieve_player:true}));
@@ -98,4 +126,4 @@ app.get("/adaptive/:id/master.m3u8",async(q,r)=>{try{const id=q.params.id;const 
 app.get("/formats/:id",async(q,r)=>{const qualities=["2160","1440","1080","720","480","360"];const formats=[];for(const quality of qualities){try{const x=await resolveQuality(q.params.id,quality);formats.push({quality:Number(quality),reportedQuality:Number(x.reportedQuality)||x.reportedQuality,url:x.url,cdn:x.cdn})}catch(e){console.log("[FORMAT-MISS]",q.params.id,quality+"p",e.message)}}r.set("Cache-Control","no-store");r.json({videoId:q.params.id,preferred:"highest",formats})});
 app.get("/resolve/:id",async(q,r)=>{try{const x=await resolveAuto(q.params.id);r.set("Cache-Control","no-store");r.json({videoId:q.params.id,requestedQuality:x.quality,reportedQuality:x.reportedQuality,url:x.url,cdn:x.cdn})}catch(e){console.error("[RESOLVE-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}});
 app.get("/play/:id/auto.mp4",async(q,r)=>{try{const id=q.params.id;const x=await resolveAuto(id);console.log("[PLAY-REDIRECT-STABLE]",id,"requested="+x.quality+"p","reported="+x.reportedQuality+"p",x.cdn);r.set({"Cache-Control":"no-store","Access-Control-Allow-Origin":"*","Location":x.url});r.status(302).end()}catch(e){console.error("[PLAY-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}});
-app.listen(process.env.PORT||3000,"0.0.0.0",()=>{console.log("Khoai addon",manifest.version,"videos",metas.length);setTimeout(async()=>{try{const x=await resolveAuto("B1qT38bVsXc");console.log("[SELFTEST] SaveTube OK","requested="+x.quality+"p","reported="+x.reportedQuality+"p",x.cdn)}catch(e){console.error("[SELFTEST] SaveTube FAILED",e.message)}},1500);setTimeout(async()=>{const id="rJiDjip4Hrc";try{const info=await ytdlp("https://www.youtube.com/watch?v="+id,{dumpSingleJson:true,noWarnings:true,skipDownload:true,extractorArgs:"youtube:player_client=visionos"},{timeout:60000});const fs=(info.formats||[]).filter(f=>f.url);console.log("[SELFTEST-VISIONOS] OK",id,"formats="+fs.length,"max="+Math.max(0,...fs.map(f=>f.height||0)),"audio="+fs.filter(f=>f.acodec&&f.acodec!=="none").length)}catch(e){console.error("[SELFTEST-VISIONOS] FAIL",id,String(e.stderr||e.message||e).slice(0,1200))}},5000)});
+app.listen(process.env.PORT||3000,"0.0.0.0",()=>{console.log("Khoai addon",manifest.version,"videos",metas.length);setTimeout(async()=>{try{const x=await resolveAuto("B1qT38bVsXc");console.log("[SELFTEST] SaveTube OK","requested="+x.quality+"p","reported="+x.reportedQuality+"p",x.cdn)}catch(e){console.error("[SELFTEST] SaveTube FAILED",e.message)}},1500);setTimeout(async()=>{try{const x=await socialPlug("AjSxpi8E9WE");console.log("[SELFTEST-SOCIALPLUG] OK","ms="+x.ms,"qualities="+x.video_quality.join(","),"muxed="+x.muxed.length)}catch(e){console.error("[SELFTEST-SOCIALPLUG] FAIL",e.message)}},3500);setTimeout(async()=>{const id="rJiDjip4Hrc";try{const info=await ytdlp("https://www.youtube.com/watch?v="+id,{dumpSingleJson:true,noWarnings:true,skipDownload:true,extractorArgs:"youtube:player_client=visionos"},{timeout:60000});const fs=(info.formats||[]).filter(f=>f.url);console.log("[SELFTEST-VISIONOS] OK",id,"formats="+fs.length,"max="+Math.max(0,...fs.map(f=>f.height||0)),"audio="+fs.filter(f=>f.acodec&&f.acodec!=="none").length)}catch(e){console.error("[SELFTEST-VISIONOS] FAIL",id,String(e.stderr||e.message||e).slice(0,1200))}},5000)});
