@@ -51,54 +51,6 @@ jobs:
           print("CATALOG_COUNT="+str(len(rows)))
           PY
           rm youtube-khoai/raw.json
-      - name: Enrich metadata and max resolution
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json, pathlib, subprocess, sys, time
-          p=pathlib.Path("youtube-khoai/catalog.json")
-          rows=json.loads(p.read_text(encoding="utf-8"))
-          for i,r in enumerate(rows,1):
-              vid=r["videoId"]
-              cmd=["yt-dlp","--skip-download","--no-playlist","--dump-single-json",
-                   "--extractor-args","youtube:player_client=android_vr,web_safari",
-                   f"https://www.youtube.com/watch?v={vid}"]
-              try:
-                  z=subprocess.run(cmd,capture_output=True,text=True,timeout=45)
-                  if z.returncode:
-                      r["enrichError"]=z.stderr[-500:].replace("\n"," ")
-                      continue
-                  d=json.loads(z.stdout)
-                  r["title"]=d.get("title") or r.get("title")
-                  r["duration"]=d.get("duration") or r.get("duration")
-                  r["thumbnail"]=d.get("thumbnail") or r.get("thumbnail")
-                  r["uploadDate"]=d.get("upload_date") or r.get("uploadDate")
-                  r["channel"]=d.get("channel") or r.get("channel")
-                  heights=sorted({int(x["height"]) for x in d.get("formats",[]) if x.get("height")}, reverse=True)
-                  r["maxResolution"]=heights[0] if heights else None
-                  r["resolutions"]=heights
-                  r["has2160p"]=2160 in heights
-                  r["has1440p"]=1440 in heights
-                  r["has1080p"]=1080 in heights
-                  r.pop("enrichError",None)
-              except Exception as e:
-                  r["enrichError"]=str(e)
-              if i%10==0:
-                  p.write_text(json.dumps(rows,ensure_ascii=False,indent=2),encoding="utf-8")
-                  print(f"ENRICH {i}/{len(rows)}",flush=True)
-          p.write_text(json.dumps(rows,ensure_ascii=False,indent=2),encoding="utf-8")
-          ok=sum(1 for r in rows if not r.get("enrichError"))
-          print(f"ENRICH_DONE={ok}/{len(rows)}")
-          print("4K="+str(sum(bool(r.get("has2160p")) for r in rows)))
-          PY
-          python - <<'PY'
-          import json,csv
-          rows=json.load(open("youtube-khoai/catalog.json",encoding="utf-8"))
-          fields=["videoId","title","url","duration","thumbnail","uploadDate","channel","maxResolution","has2160p","has1440p","has1080p"]
-          with open("youtube-khoai/catalog.csv","w",newline="",encoding="utf-8-sig") as f:
-              w=csv.DictWriter(f,fieldnames=fields,extrasaction="ignore"); w.writeheader(); w.writerows(rows)
-          PY
       - name: Commit catalog
         run: |
           git config user.name "github-actions[bot]"
