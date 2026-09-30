@@ -2,6 +2,7 @@ const express=require("express");
 const crypto=require("crypto");
 const catalog=require("./catalog.json");
 const app=express();
+const ytdlp=require("youtube-dl-exec");
 const UA="Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 Version/18.5 Mobile/15E148 Safari/604.1";
 const KEY=Buffer.from("C5D58EF67A7584E4A29F6C35BBC4EB12","hex");
 const DISCOVERY=["https://media.savetube.vip/api/random-cdn","https://media.savetube.me/api/random-cdn"];
@@ -9,7 +10,7 @@ const cache=new Map(), inFlight=new Map(), autoState=new Map();
 app.use((req,res,next)=>{res.set("Access-Control-Allow-Origin","*");console.log("[REQ]",req.method,req.originalUrl);next()});
 const metas=catalog.map(x=>({id:"khoai_"+x.videoId,type:"movie",name:x.title,poster:"https://i.ytimg.com/vi/"+x.videoId+"/hqdefault.jpg",posterShape:"landscape",background:"https://i.ytimg.com/vi/"+x.videoId+"/maxresdefault.jpg",description:"Khoai Lang Thang / Food & Travel",runtime:x.duration?Math.round(x.duration/60)+" min":undefined}));
 const byId=new Map(metas.map(x=>[x.id,x]));
-const manifest={id:"vn.ivyplay.youtube.khoailangthang",version:"3.7.0",name:"Khoai Lang Thang YouTube",description:"Direct CDN playback: Render resolves then redirects; media does not proxy through Render.",resources:["catalog",{name:"meta",types:["movie"],idPrefixes:["khoai_"]},{name:"stream",types:["movie"],idPrefixes:["khoai_"]}],types:["movie"],idPrefixes:["khoai_"],catalogs:[{type:"movie",id:"khoai-lang-thang",name:"Khoai Lang Thang"}],behaviorHints:{adult:false,p2pNotSupported:true}};
+const manifest={id:"vn.ivyplay.youtube.khoailangthang",version:"3.7.1",name:"Khoai Lang Thang YouTube",description:"Direct CDN playback: Render resolves then redirects; media does not proxy through Render.",resources:["catalog",{name:"meta",types:["movie"],idPrefixes:["khoai_"]},{name:"stream",types:["movie"],idPrefixes:["khoai_"]}],types:["movie"],idPrefixes:["khoai_"],catalogs:[{type:"movie",id:"khoai-lang-thang",name:"Khoai Lang Thang"}],behaviorHints:{adult:false,p2pNotSupported:true}};
 function timeout(ms){return AbortSignal.timeout(ms)}
 function decrypt(enc){const raw=Buffer.from(String(enc).replace(/\s/g,""),"base64"),iv=raw.subarray(0,16);const d=crypto.createDecipheriv("aes-128-cbc",KEY,iv);return JSON.parse(Buffer.concat([d.update(raw.subarray(16)),d.final()]).toString("utf8"))}
 async function cdn(){for(const ep of DISCOVERY){try{const r=await fetch(ep,{headers:{"User-Agent":UA,Accept:"application/json",Origin:"https://yt.savetube.me",Referer:"https://yt.savetube.me/"},signal:timeout(5000)});const j=await r.json();if(r.ok&&j?.cdn)return j.cdn}catch(e){console.log("[CDN-MISS]",ep,String(e))}}throw Error("No SaveTube CDN")}
@@ -55,6 +56,16 @@ app.get("/ytplay/:id",async(q,r)=>{
     r.set({"Cache-Control":"no-store","Access-Control-Allow-Origin":"*","Location":x.url});
     return r.status(302).end();
   }catch(e){console.error("[YTJS-PLAY-FAIL]",q.params.id,e.message);return r.status(502).json({error:e.message})}
+});
+app.get("/ytdlp/:id",async(q,r)=>{
+  try{
+    const id=q.params.id;
+    const info=await ytdlp("https://www.youtube.com/watch?v="+id,{dumpSingleJson:true,noWarnings:true,skipDownload:true},{timeout:45000});
+    const formats=(info.formats||[]).filter(f=>f.url).map(f=>({format_id:f.format_id,height:f.height,width:f.width,ext:f.ext,vcodec:f.vcodec,acodec:f.acodec,protocol:f.protocol,filesize:f.filesize||f.filesize_approx||null,url:f.url}));
+    const max=Math.max(0,...formats.map(f=>f.height||0));
+    console.log("[YTDLP]",id,"formats="+formats.length,"max="+max);
+    r.set("Cache-Control","no-store");r.json({id,title:info.title,count:formats.length,maxHeight:max,formats});
+  }catch(e){console.error("[YTDLP-FAIL]",q.params.id,String(e.stderr||e.message||e).slice(0,1200));r.status(502).json({error:String(e.stderr||e.message||e).slice(0,1200)})}
 });
 app.get("/ytjs/:id",async(q,r)=>{
   try{
