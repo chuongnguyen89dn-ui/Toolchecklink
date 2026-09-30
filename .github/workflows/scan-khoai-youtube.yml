@@ -1,4 +1,5 @@
 name: Scan Khoai Lang Thang YouTube
+# trigger initial scan
 on:
   workflow_dispatch:
   push:
