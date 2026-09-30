@@ -34,4 +34,14 @@ async function resolveYouTube(id){
 }
 app.get("/resolve/:id",async(q,r)=>{try{const url=await resolveYouTube(q.params.id);r.set("Cache-Control","no-store");r.json({videoId:q.params.id,url,vlc:"vlc-x-callback://x-callback-url/stream?url="+encodeURIComponent(url)});}catch(e){console.error("[RESOLVE]",q.params.id,e.message);r.status(502).json({error:e.message});}});
 app.get("/play/:id",async(q,r)=>{try{const url=await resolveYouTube(q.params.id);const esc=url.replace(/&/g,"&amp;").replace(/"/g,"&quot;");r.set("Cache-Control","no-store");r.type("html").send('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Khoai Player</title><body style="font-family:-apple-system;padding:24px"><h2>Khoai Lang Thang</h2><p><a href="'+esc+'">Phát bằng Safari</a></p><p><a href="vlc-x-callback://x-callback-url/stream?url='+encodeURIComponent(url)+'">Mở bằng VLC</a></p><video controls playsinline style="width:100%;max-width:900px" src="'+esc+'"></video></body>');}catch(e){console.error("[PLAY]",q.params.id,e.message);r.status(502).send("Resolve failed: "+e.message);}});
-app.listen(process.env.PORT||3000,"0.0.0.0",()=>console.log("Khoai addon",manifest.version,"videos",metas.length));
+app.listen(process.env.PORT||3000,"0.0.0.0",()=>{
+  console.log("Khoai addon",manifest.version,"videos",metas.length);
+  setTimeout(async()=>{
+    try{
+      const media=await resolveYouTube("B1qT38bVsXc");
+      console.log("[SELFTEST] YouTube resolve OK",media.startsWith("http")?"media-url-returned":"unexpected-output");
+    }catch(e){
+      console.error("[SELFTEST] YouTube resolve FAILED",e.message);
+    }
+  },1500);
+});
