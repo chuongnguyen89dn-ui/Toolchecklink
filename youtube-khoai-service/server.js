@@ -1,14 +1,14 @@
 const express=require("express");
 const catalog=require("./catalog.json");
 const app=express();
-app.use((req,res,next)=>{res.set("Access-Control-Allow-Origin","*");next()});
-const metas=catalog.map(x=>({id:"yt:"+x.videoId,type:"movie",name:x.title,videos:[{id:"yt:"+x.videoId,title:x.title,released:x.uploadDate||undefined}],poster:"https://i.ytimg.com/vi/"+x.videoId+"/hqdefault.jpg",posterShape:"landscape",background:"https://i.ytimg.com/vi/"+x.videoId+"/maxresdefault.jpg",description:"Khoai Lang Thang / Food & Travel",runtime:x.duration?Math.round(x.duration/60)+" min":undefined}));
+app.use((req,res,next)=>{res.set("Access-Control-Allow-Origin","*");console.log("[REQ]",req.method,req.originalUrl);next()});
+const metas=catalog.map(x=>({id:"khoai_"+x.videoId,type:"movie",name:x.title,poster:"https://i.ytimg.com/vi/"+x.videoId+"/hqdefault.jpg",posterShape:"landscape",background:"https://i.ytimg.com/vi/"+x.videoId+"/maxresdefault.jpg",description:"Khoai Lang Thang / Food & Travel",runtime:x.duration?Math.round(x.duration/60)+" min":undefined}));
 const byId=new Map(metas.map(x=>[x.id,x]));
-const manifest={"id":"vn.ivyplay.youtube.khoailangthang","version":"2.1.0","name":"Khoai Lang Thang YouTube","description":"Khoai Lang Thang YouTube for Nuvio/IvyPlay","resources":["catalog",{"name":"meta","types":["movie"],"idPrefixes":["yt:"]},{"name":"stream","types":["movie"],"idPrefixes":["yt:"]}],"types":["movie"],"idPrefixes":["yt:"],"catalogs":[{"type":"movie","id":"khoai-lang-thang","name":"Khoai Lang Thang"}],"behaviorHints":{"adult":false,"p2pNotSupported":true}};
+const manifest={"id":"vn.ivyplay.youtube.khoailangthang","version":"2.2.0","name":"Khoai Lang Thang YouTube","description":"Khoai Lang Thang YouTube for Nuvio/IvyPlay","resources":["catalog",{"name":"meta","types":["movie"],"idPrefixes":["khoai_"]},{"name":"stream","types":["movie"],"idPrefixes":["khoai_"]}],"types":["movie"],"idPrefixes":["khoai_"],"catalogs":[{"type":"movie","id":"khoai-lang-thang","name":"Khoai Lang Thang"}],"behaviorHints":{"adult":false,"p2pNotSupported":true}};
 app.get("/",(_,r)=>r.json({ok:true,name:manifest.name,version:manifest.version,videos:metas.length}));
 app.get("/manifest.json",(_,r)=>r.json(manifest));
 app.get("/catalog/movie/khoai-lang-thang.json",(_,r)=>r.json({metas}));
 app.get("/catalog/movie/khoai-lang-thang/:extra.json",(_,r)=>r.json({metas}));
 app.get("/meta/movie/:id.json",(q,r)=>{const m=byId.get(q.params.id);return m?r.json({meta:m}):r.status(404).json({meta:null})});
-app.get("/stream/movie/:id.json",(q,r)=>{const id=q.params.id.startsWith("yt:")?q.params.id.slice(3):"";return id?r.json({streams:[{name:"YouTube",title:"Khoai Lang Thang • YouTube",ytId:id}] }):r.json({streams:[]})});
+app.get("/stream/movie/:id.json",(q,r)=>{const id=q.params.id.startsWith("khoai_")?q.params.id.slice(6):"";return id?r.json({streams:[{name:"YouTube",title:"Khoai Lang Thang • YouTube",ytId:id}] }):r.json({streams:[]})});
 app.listen(process.env.PORT||3000,"0.0.0.0",()=>console.log("Khoai addon",manifest.version,"videos",metas.length));
