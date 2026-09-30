@@ -10,7 +10,7 @@ const cache=new Map(), inFlight=new Map(), autoState=new Map();
 app.use((req,res,next)=>{res.set("Access-Control-Allow-Origin","*");console.log("[REQ]",req.method,req.originalUrl);next()});
 const metas=catalog.map(x=>({id:"khoai_"+x.videoId,type:"movie",name:x.title,poster:"https://i.ytimg.com/vi/"+x.videoId+"/hqdefault.jpg",posterShape:"landscape",background:"https://i.ytimg.com/vi/"+x.videoId+"/maxresdefault.jpg",description:"Khoai Lang Thang / Food & Travel",runtime:x.duration?Math.round(x.duration/60)+" min":undefined}));
 const byId=new Map(metas.map(x=>[x.id,x]));
-const manifest={id:"vn.ivyplay.youtube.khoailangthang",version:"3.10.0",name:"Khoai Lang Thang YouTube",description:"Direct CDN playback: Render resolves then redirects; media does not proxy through Render.",resources:["catalog",{name:"meta",types:["movie"],idPrefixes:["khoai_"]},{name:"stream",types:["movie"],idPrefixes:["khoai_"]}],types:["movie"],idPrefixes:["khoai_"],catalogs:[{type:"movie",id:"khoai-lang-thang",name:"Khoai Lang Thang"}],behaviorHints:{adult:false,p2pNotSupported:true}};
+const manifest={id:"vn.ivyplay.youtube.khoailangthang",version:"3.11.0",name:"Khoai Lang Thang YouTube",description:"Direct CDN playback: Render resolves then redirects; media does not proxy through Render.",resources:["catalog",{name:"meta",types:["movie"],idPrefixes:["khoai_"]},{name:"stream",types:["movie"],idPrefixes:["khoai_"]}],types:["movie"],idPrefixes:["khoai_"],catalogs:[{type:"movie",id:"khoai-lang-thang",name:"Khoai Lang Thang"}],behaviorHints:{adult:false,p2pNotSupported:true}};
 function timeout(ms){return AbortSignal.timeout(ms)}
 function decrypt(enc){const raw=Buffer.from(String(enc).replace(/\s/g,""),"base64"),iv=raw.subarray(0,16);const d=crypto.createDecipheriv("aes-128-cbc",KEY,iv);return JSON.parse(Buffer.concat([d.update(raw.subarray(16)),d.final()]).toString("utf8"))}
 async function cdn(){for(const ep of DISCOVERY){try{const r=await fetch(ep,{headers:{"User-Agent":UA,Accept:"application/json",Origin:"https://yt.savetube.me",Referer:"https://yt.savetube.me/"},signal:timeout(5000)});const j=await r.json();if(r.ok&&j?.cdn)return j.cdn}catch(e){console.log("[CDN-MISS]",ep,String(e))}}throw Error("No SaveTube CDN")}
@@ -39,11 +39,60 @@ async function socialPlug(id){
   if(!cr.ok||!j?.id)throw Error("SocialPlug convert "+cr.status+" "+text.slice(0,120));
   const urls=Array.isArray(j.url)?j.url:[];
   const muxed=urls.filter(x=>x.url&&x.audio!==false&&x.no_audio!==true).sort((a,b)=>(b.qualityNumber||0)-(a.qualityNumber||0));
-  const mp4=j?.meta?.stream?.mp4||{};
+  const mp4=j?.stream?.mp4||{};
   console.log("[SOCIALPLUG-OK]",id,"ms="+(Date.now()-started),"qualities="+(j.video_quality||[]).join(","),"muxed="+muxed.length);
-  return {provider:"socialplug",ms:Date.now()-started,id:j.id,title:j.meta?.title,video_quality:j.video_quality||[],all:urls.filter(x=>x.url).map(x=>({quality:x.qualityNumber||x.quality,itag:x.itag,url:x.url,mime:x.mimeType||x.mime_type||x.type||null,bitrate:x.bitrate||null,width:x.width||null,height:x.height||x.qualityNumber||null,audio:x.audio,video:x.video,no_audio:x.no_audio,codec:x.codec||x.codecs||null})),muxed:muxed.map(x=>({quality:x.qualityNumber||x.quality,itag:x.itag,url:x.url})),local:Object.fromEntries(Object.entries(mp4).map(([q,v])=>[q,{quality:v.quality,streams:v.streams||[]}]))};
+  return {provider:"socialplug",ms:Date.now()-started,id:j.id,title:j.meta?.title,video_quality:j.video_quality||[],all:urls.filter(x=>x.url).map(x=>({quality:x.qualityNumber||x.quality,itag:x.itag,url:x.url,type:x.type||null,ext:x.ext||null,contentLength:x.contentLength||x.filesize||null,videoCodec:x.videoCodec||null,audioCodec:x.audioCodec||null,audio:x.audio,no_audio:x.no_audio})),muxed:muxed.map(x=>({quality:x.qualityNumber||x.quality,itag:x.itag,url:x.url})),local:Object.fromEntries(Object.entries(mp4).map(([q,v])=>[q,{quality:v.quality,streams:v.streams||[]}]))};
 }
 app.get("/socialplug/:id",async(q,r)=>{try{const x=await socialPlug(q.params.id);r.set("Cache-Control","no-store");r.json(x)}catch(e){console.error("[SOCIALPLUG-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}});
+const spAdaptiveCache=new Map();
+function xml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;")}
+function mp4Sidx(buf){
+  let p=0;
+  while(p+8<=buf.length){
+    let size=buf.readUInt32BE(p),head=8; const type=buf.toString("ascii",p+4,p+8);
+    if(size===1&&p+16<=buf.length){size=Number(buf.readBigUInt64BE(p+8));head=16}
+    if(size<8)break;
+    if(type==="sidx")return {start:p,end:p+size-1,initEnd:p-1};
+    p+=size;
+  }
+  return null;
+}
+async function spIndex(url){
+  const r=await fetch(url,{headers:{"User-Agent":UA,Accept:"*/*",Range:"bytes=0-524287",Referer:"https://socialplug.to/vi/"},signal:timeout(12000)});
+  if(!r.ok&&r.status!==206)throw Error("SocialPlug range "+r.status);
+  const b=Buffer.from(await r.arrayBuffer()),idx=mp4Sidx(b);
+  if(!idx)throw Error("No MP4 sidx in first "+b.length+" bytes");
+  return idx;
+}
+async function socialPlugDash(id){
+  const hit=spAdaptiveCache.get(id); if(hit&&hit.expires>Date.now())return hit;
+  const x=await socialPlug(id), qs=["360","480","720","1080","1440","2160"];
+  const entries=qs.map(q=>({q,streams:x.local[q]?.streams||[]})).filter(v=>v.streams.length>=2);
+  if(!entries.length)throw Error("SocialPlug returned no adaptive MP4 pairs");
+  const audioPath=entries[0].streams[1],audioUrl="https://socialplug.to"+audioPath;
+  const audioIdx=await spIndex(audioUrl);
+  const videos=[];
+  for(const e of entries){
+    try{
+      const url="https://socialplug.to"+e.streams[0],idx=await spIndex(url);
+      const raw=x.all.find(v=>String(v.quality)===e.q&&!v.audio&&v.ext==="mp4");
+      videos.push({q:e.q,url,idx,codec:raw?.videoCodec||(+e.q>1080?"av01":"avc1"),bytes:+raw?.contentLength||0});
+    }catch(err){console.log("[SP-DASH-MISS]",id,e.q,err.message)}
+  }
+  if(!videos.length)throw Error("No indexed SocialPlug video representations");
+  const out={videos,audio:{url:audioUrl,idx:audioIdx},expires:Date.now()+20*60*1000}; spAdaptiveCache.set(id,out);
+  console.log("[SP-DASH-READY]",id,"qualities="+videos.map(v=>v.q).join(","));
+  return out;
+}
+app.get("/adaptive/:id/manifest.mpd",async(q,r)=>{try{
+  const id=q.params.id,x=await socialPlugDash(id),dims={360:[640,360],480:[854,480],720:[1280,720],1080:[1920,1080],1440:[2560,1440],2160:[3840,2160]};
+  const reps=x.videos.map(v=>{const [w,h]=dims[v.q],bw=v.bytes?Math.max(300000,Math.round(v.bytes*8/3432)):({360:700000,480:1200000,720:2500000,1080:5000000,1440:9000000,2160:16000000}[v.q]);const codec=v.codec==="av01"?"av01.0.08M.08":"avc1.640028";return '<Representation id="v'+v.q+'" bandwidth="'+bw+'" width="'+w+'" height="'+h+'" codecs="'+codec+'" mimeType="video/mp4"><BaseURL>'+xml(v.url)+'</BaseURL><SegmentBase indexRange="'+v.idx.start+'-'+v.idx.end+'"><Initialization range="0-'+v.idx.initEnd+'"/></SegmentBase></Representation>'}).join("");
+  const a=x.audio;
+  const mpd='<?xml version="1.0" encoding="UTF-8"?><MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT3432S" minBufferTime="PT2S" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011"><Period><AdaptationSet contentType="video" segmentAlignment="true" startWithSAP="1">'+reps+'</AdaptationSet><AdaptationSet contentType="audio" segmentAlignment="true"><Representation id="a140" bandwidth="134000" audioSamplingRate="44100" codecs="mp4a.40.2" mimeType="audio/mp4"><BaseURL>'+xml(a.url)+'</BaseURL><SegmentBase indexRange="'+a.idx.start+'-'+a.idx.end+'"><Initialization range="0-'+a.idx.initEnd+'"/></SegmentBase></Representation></AdaptationSet></Period></MPD>';
+  console.log("[SP-DASH-MPD]",id,"max="+Math.max(...x.videos.map(v=>+v.q))+"p","variants="+x.videos.length);
+  r.set({"Content-Type":"application/dash+xml","Cache-Control":"no-store","Access-Control-Allow-Origin":"*"}).send(mpd)
+}catch(e){console.error("[SP-DASH-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}});
+
 async function resolveAuto(id){
   // Fast-start: give HD a short head start, without sequential 4K timeouts.
   // This endpoint returns one progressive URL; true mid-play ABR requires HLS/DASH/player support.
@@ -58,7 +107,7 @@ app.get("/play/:id/:quality.mp4",async(q,r)=>{try{const quality=String(q.params.
 app.get("/catalog/movie/khoai-lang-thang.json",(_,r)=>r.json({metas}));
 app.get("/catalog/movie/khoai-lang-thang/:extra.json",(_,r)=>r.json({metas}));
 app.get("/meta/movie/:id.json",(q,r)=>{const m=byId.get(q.params.id);return m?r.json({meta:m}):r.status(404).json({meta:null})});
-app.get("/stream/movie/:id.json",(q,r)=>{const id=q.params.id.startsWith("khoai_")?q.params.id.slice(6):"";return id?r.json({streams:[{name:"YouTube • AUTO",title:"AUTO 4K • network fallback",url:`${q.protocol}://${q.get("host")}/play/${id}/auto.mp4`,behaviorHints:{notWebReady:true}}]}):r.json({streams:[]})});
+app.get("/stream/movie/:id.json",(q,r)=>{const id=q.params.id.startsWith("khoai_")?q.params.id.slice(6):"";return id?r.json({streams:[{name:"YouTube • AUTO",title:"AUTO 4K • network fallback",url:`${q.protocol}://${q.get("host")}/adaptive/${id}/manifest.mpd`,behaviorHints:{notWebReady:true}}]}):r.json({streams:[]})});
 let ytDirectPromise;
 async function ytDirect(){
   if(!ytDirectPromise)ytDirectPromise=import("youtubei.js").then(async m=>m.Innertube.create({retrieve_player:true}));
