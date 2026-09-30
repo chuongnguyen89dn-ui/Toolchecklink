@@ -9,7 +9,7 @@ const cache=new Map(), inFlight=new Map(), autoState=new Map();
 app.use((req,res,next)=>{res.set("Access-Control-Allow-Origin","*");console.log("[REQ]",req.method,req.originalUrl);next()});
 const metas=catalog.map(x=>({id:"khoai_"+x.videoId,type:"movie",name:x.title,poster:"https://i.ytimg.com/vi/"+x.videoId+"/hqdefault.jpg",posterShape:"landscape",background:"https://i.ytimg.com/vi/"+x.videoId+"/maxresdefault.jpg",description:"Khoai Lang Thang / Food & Travel",runtime:x.duration?Math.round(x.duration/60)+" min":undefined}));
 const byId=new Map(metas.map(x=>[x.id,x]));
-const manifest={id:"vn.ivyplay.youtube.khoailangthang",version:"3.6.1",name:"Khoai Lang Thang YouTube",description:"Direct CDN playback: Render resolves then redirects; media does not proxy through Render.",resources:["catalog",{name:"meta",types:["movie"],idPrefixes:["khoai_"]},{name:"stream",types:["movie"],idPrefixes:["khoai_"]}],types:["movie"],idPrefixes:["khoai_"],catalogs:[{type:"movie",id:"khoai-lang-thang",name:"Khoai Lang Thang"}],behaviorHints:{adult:false,p2pNotSupported:true}};
+const manifest={id:"vn.ivyplay.youtube.khoailangthang",version:"3.7.0",name:"Khoai Lang Thang YouTube",description:"Direct CDN playback: Render resolves then redirects; media does not proxy through Render.",resources:["catalog",{name:"meta",types:["movie"],idPrefixes:["khoai_"]},{name:"stream",types:["movie"],idPrefixes:["khoai_"]}],types:["movie"],idPrefixes:["khoai_"],catalogs:[{type:"movie",id:"khoai-lang-thang",name:"Khoai Lang Thang"}],behaviorHints:{adult:false,p2pNotSupported:true}};
 function timeout(ms){return AbortSignal.timeout(ms)}
 function decrypt(enc){const raw=Buffer.from(String(enc).replace(/\s/g,""),"base64"),iv=raw.subarray(0,16);const d=crypto.createDecipheriv("aes-128-cbc",KEY,iv);return JSON.parse(Buffer.concat([d.update(raw.subarray(16)),d.final()]).toString("utf8"))}
 async function cdn(){for(const ep of DISCOVERY){try{const r=await fetch(ep,{headers:{"User-Agent":UA,Accept:"application/json",Origin:"https://yt.savetube.me",Referer:"https://yt.savetube.me/"},signal:timeout(5000)});const j=await r.json();if(r.ok&&j?.cdn)return j.cdn}catch(e){console.log("[CDN-MISS]",ep,String(e))}}throw Error("No SaveTube CDN")}
@@ -29,12 +29,33 @@ app.get("/play/:id/:quality.mp4",async(q,r)=>{try{const quality=String(q.params.
 app.get("/catalog/movie/khoai-lang-thang.json",(_,r)=>r.json({metas}));
 app.get("/catalog/movie/khoai-lang-thang/:extra.json",(_,r)=>r.json({metas}));
 app.get("/meta/movie/:id.json",(q,r)=>{const m=byId.get(q.params.id);return m?r.json({meta:m}):r.status(404).json({meta:null})});
-app.get("/stream/movie/:id.json",(q,r)=>{const id=q.params.id.startsWith("khoai_")?q.params.id.slice(6):"";return id?r.json({streams:[{name:"YouTube • AUTO",title:"AUTO fallback on player retry",url:`${q.protocol}://${q.get("host")}/adaptive/${id}/master.m3u8`,behaviorHints:{notWebReady:true}}]}):r.json({streams:[]})});
+app.get("/stream/movie/:id.json",(q,r)=>{const id=q.params.id.startsWith("khoai_")?q.params.id.slice(6):"";return id?r.json({streams:[{name:"YouTube • AUTO",title:"AUTO fallback on player retry",url:`${q.protocol}://${q.get("host")}/ytplay/${id}`,behaviorHints:{notWebReady:true}}]}):r.json({streams:[]})});
 let ytDirectPromise;
 async function ytDirect(){
   if(!ytDirectPromise)ytDirectPromise=import("youtubei.js").then(async m=>m.Innertube.create({retrieve_player:true}));
   return ytDirectPromise;
 }
+async function resolveYtDirect(id){
+  const yt=await ytDirect();
+  const info=await yt.getBasicInfo(id);
+  const all=[...(info.streaming_data?.formats||[]),...(info.streaming_data?.adaptive_formats||[])];
+  const muxed=all.filter(f=>f.has_audio&&f.has_video).sort((a,b)=>(b.height||0)-(a.height||0));
+  if(!muxed.length)throw Error("YouTube.js returned no muxed playable formats");
+  for(const f of muxed){
+    try{
+      const url=await f.decipher(yt.session.player);
+      if(url){console.log("[YTJS-SELECT]",id,(f.quality_label||f.quality||f.height),"itag="+f.itag);return {url,format:f}}
+    }catch(e){console.log("[YTJS-DECIPHER-MISS]",id,"itag="+f.itag,e.message)}
+  }
+  throw Error("YouTube.js could not decipher a playable URL");
+}
+app.get("/ytplay/:id",async(q,r)=>{
+  try{
+    const x=await resolveYtDirect(q.params.id);
+    r.set({"Cache-Control":"no-store","Access-Control-Allow-Origin":"*","Location":x.url});
+    return r.status(302).end();
+  }catch(e){console.error("[YTJS-PLAY-FAIL]",q.params.id,e.message);return r.status(502).json({error:e.message})}
+});
 app.get("/ytjs/:id",async(q,r)=>{
   try{
     const yt=await ytDirect();
