@@ -1,16 +1,16 @@
 {
   "name": "khoai-nuvio-addon",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "postinstall": "curl -L --fail --retry 3 https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o yt-dlp && chmod +x yt-dlp"
+    "postinstall": "curl -L --fail --retry 3 https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o yt-dlp && chmod +x yt-dlp && rm -rf bgutil-ytdlp-pot-provider && git clone --depth 1 --branch 2.0.0 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git bgutil-ytdlp-pot-provider && cd bgutil-ytdlp-pot-provider/server && npm ci && npx tsc"
   },
   "dependencies": {
     "express": "^4.21.2"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }
