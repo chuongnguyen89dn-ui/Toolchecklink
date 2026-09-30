@@ -30,6 +30,26 @@ app.get("/catalog/movie/khoai-lang-thang.json",(_,r)=>r.json({metas}));
 app.get("/catalog/movie/khoai-lang-thang/:extra.json",(_,r)=>r.json({metas}));
 app.get("/meta/movie/:id.json",(q,r)=>{const m=byId.get(q.params.id);return m?r.json({meta:m}):r.status(404).json({meta:null})});
 app.get("/stream/movie/:id.json",(q,r)=>{const id=q.params.id.startsWith("khoai_")?q.params.id.slice(6):"";return id?r.json({streams:[{name:"YouTube • AUTO",title:"AUTO fallback on player retry",url:`${q.protocol}://${q.get("host")}/adaptive/${id}/master.m3u8`,behaviorHints:{notWebReady:true}}]}):r.json({streams:[]})});
+let ytDirectPromise;
+async function ytDirect(){
+  if(!ytDirectPromise)ytDirectPromise=import("youtubei.js").then(async m=>m.Innertube.create({retrieve_player:true}));
+  return ytDirectPromise;
+}
+app.get("/ytjs/:id",async(q,r)=>{
+  try{
+    const yt=await ytDirect();
+    const info=await yt.getBasicInfo(q.params.id);
+    const all=[...(info.streaming_data?.formats||[]),...(info.streaming_data?.adaptive_formats||[])];
+    const formats=await Promise.all(all.map(async f=>({
+      itag:f.itag,quality:f.quality_label||f.quality,height:f.height,width:f.width,
+      bitrate:f.bitrate,mimeType:f.mime_type||f.mimeType,
+      audio:!!f.has_audio,video:!!f.has_video,
+      url:await f.decipher(yt.session.player).catch(()=>null)
+    })));
+    console.log("[YTJS]",q.params.id,"formats="+formats.length,"max="+Math.max(0,...formats.map(x=>x.height||0)));
+    r.json({id:q.params.id,count:formats.length,maxHeight:Math.max(0,...formats.map(x=>x.height||0)),formats});
+  }catch(e){console.error("[YTJS-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}
+});
 app.get("/inspect/:id",async(q,r)=>{try{const c=await context(q.params.id);const i=c.info||{};const formats=i.video_formats||i.videoFormats||i.formats||[];const safe=formats.map(f=>({height:f.height,quality:f.quality,label:f.label,mimeType:f.mimeType||f.mime_type,type:f.type,ext:f.ext,hasUrl:!!f.url}));const keys=Object.keys(i).filter(k=>/hls|dash|manifest|format|quality/i.test(k));const manifests={};for(const k of keys){if(/hls|dash|manifest/i.test(k))manifests[k]=typeof i[k]==="string"?i[k].slice(0,120):i[k]}console.log("[INSPECT]",q.params.id,"keys="+keys.join(","),"formats="+safe.length,"manifests="+Object.keys(manifests).join(","));r.json({videoId:q.params.id,keys,formats:safe,manifests})}catch(e){console.error("[INSPECT-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}});
 app.get("/adaptive/:id/master.m3u8",async(q,r)=>{try{const id=q.params.id;const qualities=[["2160",18000000],["1440",10000000],["1080",6000000],["720",3000000],["480",1500000],["360",800000]];const out=["#EXTM3U","#EXT-X-VERSION:3","#EXT-X-INDEPENDENT-SEGMENTS"];for(const [quality,bw] of qualities){try{const x=await resolveQuality(id,quality);out.push("#EXT-X-STREAM-INF:BANDWIDTH="+bw+",AVERAGE-BANDWIDTH="+Math.round(bw*.8)+",RESOLUTION="+({2160:"3840x2160",1440:"2560x1440",1080:"1920x1080",720:"1280x720",480:"854x480",360:"640x360"})[quality]+",NAME=\""+quality+"p\"");out.push(x.url)}catch(e){console.log("[ADAPTIVE-MISS]",id,quality+"p",e.message)}}if(out.length===3)throw Error("No adaptive variants");console.log("[ADAPTIVE-MASTER]",id,"variants="+((out.length-3)/2));r.set({"Content-Type":"application/vnd.apple.mpegurl","Cache-Control":"no-store","Access-Control-Allow-Origin":"*"});r.send(out.join("\n")+"\n")}catch(e){console.error("[ADAPTIVE-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}});
 app.get("/formats/:id",async(q,r)=>{const qualities=["2160","1440","1080","720","480","360"];const formats=[];for(const quality of qualities){try{const x=await resolveQuality(q.params.id,quality);formats.push({quality:Number(quality),reportedQuality:Number(x.reportedQuality)||x.reportedQuality,url:x.url,cdn:x.cdn})}catch(e){console.log("[FORMAT-MISS]",q.params.id,quality+"p",e.message)}}r.set("Cache-Control","no-store");r.json({videoId:q.params.id,preferred:"highest",formats})});
