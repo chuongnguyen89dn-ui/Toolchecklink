@@ -1,47 +1,27 @@
 const express=require("express");
-const {execFile}=require("child_process");
-const {promisify}=require("util");
-const execFileAsync=promisify(execFile);
+const crypto=require("crypto");
 const catalog=require("./catalog.json");
 const app=express();
+const UA="Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 Version/18.5 Mobile/15E148 Safari/604.1";
+const KEY=Buffer.from("C5D58EF67A7584E4A29F6C35BBC4EB12","hex");
+const DISCOVERY=["https://media.savetube.vip/api/random-cdn","https://media.savetube.me/api/random-cdn"];
+const cache=new Map(), inFlight=new Map();
 app.use((req,res,next)=>{res.set("Access-Control-Allow-Origin","*");console.log("[REQ]",req.method,req.originalUrl);next()});
 const metas=catalog.map(x=>({id:"khoai_"+x.videoId,type:"movie",name:x.title,poster:"https://i.ytimg.com/vi/"+x.videoId+"/hqdefault.jpg",posterShape:"landscape",background:"https://i.ytimg.com/vi/"+x.videoId+"/maxresdefault.jpg",description:"Khoai Lang Thang / Food & Travel",runtime:x.duration?Math.round(x.duration/60)+" min":undefined}));
 const byId=new Map(metas.map(x=>[x.id,x]));
-const manifest={"id":"vn.ivyplay.youtube.khoailangthang","version":"2.2.0","name":"Khoai Lang Thang YouTube","description":"Khoai Lang Thang YouTube for Nuvio/IvyPlay","resources":["catalog",{"name":"meta","types":["movie"],"idPrefixes":["khoai_"]},{"name":"stream","types":["movie"],"idPrefixes":["khoai_"]}],"types":["movie"],"idPrefixes":["khoai_"],"catalogs":[{"type":"movie","id":"khoai-lang-thang","name":"Khoai Lang Thang"}],"behaviorHints":{"adult":false,"p2pNotSupported":true}};
-app.get("/",(_,r)=>r.json({ok:true,name:manifest.name,version:manifest.version,videos:metas.length}));
+const manifest={id:"vn.ivyplay.youtube.khoailangthang",version:"3.0.0",name:"Khoai Lang Thang YouTube",description:"Direct CDN playback: Render resolves then redirects; media does not proxy through Render.",resources:["catalog",{name:"meta",types:["movie"],idPrefixes:["khoai_"]},{name:"stream",types:["movie"],idPrefixes:["khoai_"]}],types:["movie"],idPrefixes:["khoai_"],catalogs:[{type:"movie",id:"khoai-lang-thang",name:"Khoai Lang Thang"}],behaviorHints:{adult:false,p2pNotSupported:true}};
+function timeout(ms){return AbortSignal.timeout(ms)}
+function decrypt(enc){const raw=Buffer.from(String(enc).replace(/\s/g,""),"base64"),iv=raw.subarray(0,16);const d=crypto.createDecipheriv("aes-128-cbc",KEY,iv);return JSON.parse(Buffer.concat([d.update(raw.subarray(16)),d.final()]).toString("utf8"))}
+async function cdn(){for(const ep of DISCOVERY){try{const r=await fetch(ep,{headers:{"User-Agent":UA,Accept:"application/json",Origin:"https://yt.savetube.me",Referer:"https://yt.savetube.me/"},signal:timeout(5000)});const j=await r.json();if(r.ok&&j?.cdn)return j.cdn}catch(e){console.log("[CDN-MISS]",ep,String(e))}}throw Error("No SaveTube CDN")}
+async function context(id){const c=await cdn(),base="https://"+c,h={"Content-Type":"application/json",Accept:"application/json","User-Agent":UA,Origin:"https://yt.savetube.me",Referer:"https://yt.savetube.me/"};const r=await fetch(base+"/v2/info",{method:"POST",headers:h,body:JSON.stringify({url:"https://www.youtube.com/watch?v="+id}),signal:timeout(12000)});const j=await r.json();if(!r.ok||!j?.data)throw Error("SaveTube info "+r.status);return{base,h,info:decrypt(j.data),cdn:c}}
+async function resolveQuality(id,q){const key=id+":"+q,hit=cache.get(key);if(hit&&hit.expires>Date.now())return hit;if(inFlight.has(key))return inFlight.get(key);const p=(async()=>{const c=await context(id);const r=await fetch(c.base+"/download",{method:"POST",headers:c.h,body:JSON.stringify({id,downloadType:"video",quality:q,key:c.info.key}),signal:timeout(15000)});const t=await r.text();let j;try{j=JSON.parse(t)}catch{}const url=j?.data?.downloadUrl||j?.data?.url||j?.downloadUrl;if(!r.ok||!url)throw Error("SaveTube download "+r.status);const v={url,quality:q,cdn:c.cdn,expires:Date.now()+90*60*1000};cache.set(key,v);console.log("[RESOLVED]",id,q,c.cdn);return v})().finally(()=>inFlight.delete(key));inFlight.set(key,p);return p}
+async function resolveAuto(id){for(const q of ["720","360"]){try{return await resolveQuality(id,q)}catch(e){console.log("[QUALITY-MISS]",id,q,e.message)}}throw Error("No playable SaveTube URL")}
+app.get("/",(_,r)=>r.json({ok:true,name:manifest.name,version:manifest.version,videos:metas.length,cache:cache.size}));
 app.get("/manifest.json",(_,r)=>r.json(manifest));
 app.get("/catalog/movie/khoai-lang-thang.json",(_,r)=>r.json({metas}));
 app.get("/catalog/movie/khoai-lang-thang/:extra.json",(_,r)=>r.json({metas}));
 app.get("/meta/movie/:id.json",(q,r)=>{const m=byId.get(q.params.id);return m?r.json({meta:m}):r.status(404).json({meta:null})});
-app.get("/stream/movie/:id.json",(q,r)=>{const id=q.params.id.startsWith("khoai_")?q.params.id.slice(6):"";return id?r.json({streams:[{name:"YouTube",title:"Khoai Lang Thang • YouTube",ytId:id}] }):r.json({streams:[]})});
-
-async function resolveYouTube(id){
-  if(!/^[A-Za-z0-9_-]{11}$/.test(id)) throw new Error("invalid video id");
-  const url="https://www.youtube.com/watch?v="+id;
-  const args=[
-    "--no-playlist","--skip-download","--no-warnings",
-    "--plugin-dirs",__dirname+"/bgutil-ytdlp-pot-provider/plugin",
-    "--js-runtimes","node",
-    "--remote-components","ejs:github",
-    "--extractor-args","youtube:player_client=mweb",
-    "--extractor-args","youtubepot-bgutilscript:server_home="+__dirname+"/bgutil-ytdlp-pot-provider/server",
-    "-f","best[protocol*=m3u8]/best","-g",url
-  ];
-  const {stdout}=await execFileAsync(__dirname+"/yt-dlp",args,{timeout:30000,maxBuffer:1024*1024});
-  const media=stdout.trim().split(/\r?\n/).filter(Boolean)[0];
-  if(!media) throw new Error("no media url");
-  return media;
-}
-app.get("/resolve/:id",async(q,r)=>{try{const url=await resolveYouTube(q.params.id);r.set("Cache-Control","no-store");r.json({videoId:q.params.id,url,vlc:"vlc-x-callback://x-callback-url/stream?url="+encodeURIComponent(url)});}catch(e){console.error("[RESOLVE]",q.params.id,e.message);r.status(502).json({error:e.message});}});
-app.get("/play/:id",async(q,r)=>{try{const url=await resolveYouTube(q.params.id);const esc=url.replace(/&/g,"&amp;").replace(/"/g,"&quot;");r.set("Cache-Control","no-store");r.type("html").send('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Khoai Player</title><body style="font-family:-apple-system;padding:24px"><h2>Khoai Lang Thang</h2><p><a href="'+esc+'">Phát bằng Safari</a></p><p><a href="vlc-x-callback://x-callback-url/stream?url='+encodeURIComponent(url)+'">Mở bằng VLC</a></p><video controls playsinline style="width:100%;max-width:900px" src="'+esc+'"></video></body>');}catch(e){console.error("[PLAY]",q.params.id,e.message);r.status(502).send("Resolve failed: "+e.message);}});
-app.listen(process.env.PORT||3000,"0.0.0.0",()=>{
-  console.log("Khoai addon",manifest.version,"videos",metas.length);
-  setTimeout(async()=>{
-    try{
-      const media=await resolveYouTube("B1qT38bVsXc");
-      console.log("[SELFTEST] YouTube resolve OK",media.startsWith("http")?"media-url-returned":"unexpected-output");
-    }catch(e){
-      console.error("[SELFTEST] YouTube resolve FAILED",e.message);
-    }
-  },1500);
-});
+app.get("/stream/movie/:id.json",(q,r)=>{const id=q.params.id.startsWith("khoai_")?q.params.id.slice(6):"";return id?r.json({streams:[{name:"YouTube • AUTO",title:"Direct CDN • 720p → 360p",url:`${q.protocol}://${q.get("host")}/play/${id}/auto.mp4`,behaviorHints:{notWebReady:true}}]}):r.json({streams:[]})});
+app.get("/resolve/:id",async(q,r)=>{try{const x=await resolveAuto(q.params.id);r.set("Cache-Control","no-store");r.json({videoId:q.params.id,quality:x.quality,url:x.url,cdn:x.cdn})}catch(e){console.error("[RESOLVE-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}});
+app.get("/play/:id/auto.mp4",async(q,r)=>{try{const x=await resolveAuto(q.params.id);console.log("[REDIRECT]",q.params.id,x.quality);r.set({"Cache-Control":"no-store","Access-Control-Allow-Origin":"*","Location":x.url});r.status(302).end()}catch(e){console.error("[PLAY-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}});
+app.listen(process.env.PORT||3000,"0.0.0.0",()=>{console.log("Khoai addon",manifest.version,"videos",metas.length);setTimeout(async()=>{try{const x=await resolveAuto("B1qT38bVsXc");console.log("[SELFTEST] SaveTube OK",x.quality,x.cdn)}catch(e){console.error("[SELFTEST] SaveTube FAILED",e.message)}},1500)});
