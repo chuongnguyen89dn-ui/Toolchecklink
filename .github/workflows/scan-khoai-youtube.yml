@@ -1,0 +1,63 @@
+name: Scan Khoai Lang Thang YouTube
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/scan-khoai-youtube.yml'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install yt-dlp
+        run: python -m pip install -U yt-dlp
+      - name: Scan Videos tab only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p youtube-khoai
+          yt-dlp --flat-playlist --dump-single-json "https://www.youtube.com/@KhoaiLangThang/videos" > youtube-khoai/raw.json
+          python - <<'PY'
+          import json, csv, pathlib
+          p=pathlib.Path("youtube-khoai/raw.json")
+          d=json.loads(p.read_text(encoding="utf-8"))
+          rows=[]
+          seen=set()
+          for e in d.get("entries") or []:
+              vid=e.get("id")
+              if not vid or vid in seen: continue
+              seen.add(vid)
+              rows.append({
+                  "videoId":vid,
+                  "title":e.get("title"),
+                  "url":f"https://www.youtube.com/watch?v={vid}",
+                  "duration":e.get("duration"),
+                  "thumbnail":e.get("thumbnail"),
+                  "uploadDate":e.get("upload_date"),
+                  "channel":e.get("channel") or d.get("channel") or "Khoai Lang Thang / Food & Travel"
+              })
+          pathlib.Path("youtube-khoai/catalog.json").write_text(
+              json.dumps(rows,ensure_ascii=False,indent=2),encoding="utf-8")
+          with open("youtube-khoai/catalog.csv","w",newline="",encoding="utf-8-sig") as f:
+              w=csv.DictWriter(f,fieldnames=list(rows[0].keys()) if rows else ["videoId","title","url","duration","thumbnail","uploadDate","channel"])
+              w.writeheader(); w.writerows(rows)
+          print("CATALOG_COUNT="+str(len(rows)))
+          PY
+          rm youtube-khoai/raw.json
+      - name: Commit catalog
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add youtube-khoai/catalog.json youtube-khoai/catalog.csv
+          git diff --cached --quiet || git commit -m "Update Khoai Lang Thang YouTube catalog"
+          git push
+      - uses: actions/upload-artifact@v4
+        with:
+          name: khoai-lang-thang-youtube-catalog
+          path: youtube-khoai/
