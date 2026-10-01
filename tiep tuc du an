@@ -1,0 +1,203 @@
+# Tiếp tục dự án — IkiSoda scanner / addon
+
+## Phạm vi cuộc chat này
+Cập nhật handoff toàn bộ tiến trình liên quan đến scanner IkiSoda, resolver 1080, GitHub publish, lỗi CDN, resume/checkpoint và kế hoạch quét lại.
+
+## Repo
+- GitHub: chuongnguyen89dn-ui/Toolchecklink
+- Nhánh chính: main
+- Dự án con liên quan: youtube-khoai-service trước đây; trong cuộc chat này tập trung scanner IkiSoda.
+- File tiếp tục dự án này nằm ở root với tên: `tiep tuc du an`.
+
+## Mục tiêu hiện tại
+Xây scanner IkiSoda để:
+1. Bắt đầu từ trang chủ `https://ikisoda.com` / `https://ikisoda.com/videos/`.
+2. Quét pagination toàn bộ site.
+3. Lọc theo bộ keyword hiện tại.
+4. Với phim KEEP, resolve trực tiếp 1080 bằng flashvars/license_code/get_file.
+5. Xác minh redirect tới đúng CDN/media_id và video/mp4.
+6. Chỉ phim verified 1080 mới được publish vào addon/GitHub.
+7. Publish theo batch 20 phim verified KEEP.
+8. Nếu CDN tạm lỗi thì không đánh dấu phim là false/seen; để lần chạy sau retry.
+9. Checkpoint phải lưu tiến trình và thống kê để đóng/mở PC vẫn resume đúng.
+10. Pagination không được chết chỉ vì click nút Next; nếu click lỗi phải có fallback URL trực tiếp.
+
+## Phiên bản scanner
+Đang dùng:
+`ikisoda_bulk100_v61_resume_github_netwait.py`
+
+Đặc điểm:
+- FAST HTTP V6.1 là resolver chính.
+- KEEP phim: resolve 1080 trực tiếp từ IkiSoda KVS flashvars/license_code, validate get_file redirect + expected media_id + video/mp4.
+- Browser/network verifier V6.1 là fallback.
+- Pagination + 5-worker metadata scan kế thừa FAST V5.
+- Đã thêm chẩn đoán FAST HTTP: host, attempt, status, media_id, error.
+- Đã thêm trạng thái RETRY_1080 cho lỗi transport CDN.
+
+## Lỗi CDN đã xác minh
+Trong nhiều phim:
+`get_file` trả 302 nhưng redirect sang:
+`st10.ikisoda.com`
+
+DNS:
+`st10.ikisoda.com -> 89.163.250.220`
+
+Test trực tiếp trên PC/5G:
+`curl -I --connect-timeout 10 https://st10.ikisoda.com/`
+=> `curl: (7) Failed to connect ... port 443 ... Could not connect to server`
+
+Gọi thẳng IP:
+`curl -I --connect-timeout 10 https://89.163.250.220/ -k`
+=> cũng thất bại.
+
+Trong scanner:
+`ConnectionRefusedError(10061)`
+lặp 3 attempts/phim.
+
+Trong khi:
+`st11.ikisoda.com`
+DNS tới `185.231.223.240` và:
+`curl -I --connect-timeout 10 https://st11.ikisoda.com/`
+=> HTTP 200 OK.
+
+Kết luận vận hành:
+- Không coi lỗi st10 là phim không có 1080.
+- Không mark false/seen.
+- In:
+`RETRY_1080: signed CDN transport unavailable ... NOT marked false/seen`
+và:
+`RETRYABLE 1080 ... URL NOT marked seen`
+- Các phim st10 sẽ được kiểm tra lại ở lượt sau khi CDN/route hoạt động.
+
+## Sửa scanner đã thực hiện
+Đã sửa đúng một file:
+`ikisoda_bulk100_v61_resume_github_netwait.py`
+
+Đã thêm:
+- log chi tiết signed CDN error.
+- phát hiện get_file redirect 301/302/303/307/308 + signed CDN transport errors.
+- trả về `retryable_network=True`.
+- không append phim retryable vào movies.
+- không add URL retryable vào seen.
+- py_compile đã OK.
+
+File này là file user copy đè vào thư mục scanner.
+
+## Kết quả scan gần nhất
+Scanner từng chạy tới Page 30.
+
+Cuối Page 30:
+`[P30 30/30 W4] ... sdam-101 ...`
+`W4 KEEP -> FAST HTTP 1080 resolver ... expected media 22659`
+`W4 verified: True stream id: 22659 events: 2`
+
+Sau đó:
+`ABORT pagination: could not click from page 30 to 31`
+
+Sau lỗi pagination, code vẫn:
+`GITHUB BATCH READY: 17 unique verified KEEP -> PUSH NOW`
+`PUBLISHED VERIFIED KEEP 134 (attempt 1)`
+`DONE {"processed": 261, "verified_keep": 134, "skip": 221, "errors": 0}`
+
+Ý nghĩa:
+- Không phải scanner bị treo.
+- Pagination Page 30 -> 31 bị lỗi.
+- Có 17 phim verified KEEP trong batch cuối nhưng code force-publish khi kết thúc, nên catalog tổng đã lên 134.
+- Cần sửa để lỗi pagination không tự publish batch chưa đủ 20 nếu yêu cầu batch phải đủ 20.
+- Tuy nhiên 17 phim đã publish thì không rollback tự động.
+
+## Thống kê JSON đã kiểm tra
+File dữ liệu cũ cho lượt scan:
+- `ikisoda_bulk100_v61(4).json`
+- `ikisoda_bulk100_v61_checkpoint(5).json`
+- `ikisoda-catalog(3).json`
+
+Kết quả:
+- 261 records/URL được ghi vào JSON.
+- 261 seen.
+- 40 KEEP.
+- 221 SKIP.
+- 0 ERROR.
+- 7 verified_1080 true nằm trực tiếp trong records của lượt đó.
+- Catalog tổng hợp có 134 phim unique.
+- Lưu ý: 261 không phải tổng URL thực tế đã thử, vì RETRY_1080 cố tình không ghi movies/seen.
+- Do đó cần bổ sung thống kê persistent:
+  total_attempted
+  verified
+  skip
+  retry_1080
+  error
+  published
+  pages
+  current_page
+
+## Pagination
+Lỗi:
+`ABORT pagination: could not click from page 30 to 31`
+
+Yêu cầu sửa:
+- Không phụ thuộc duy nhất vào click DOM Next.
+- Khi click không được, thử URL pagination trực tiếp, ví dụ query/page phù hợp với site.
+- Phải xác định đúng URL pattern thực tế của IkiSoda trước khi sửa.
+- Không reset về Page 1 khi chỉ gặp lỗi chuyển page.
+- Checkpoint phải ghi page cuối cùng đã hoàn tất.
+
+## Trạng thái site IkiSoda
+Trong lúc test gần đây:
+- User báo web IkiSoda hiện tại không play được.
+- User vẫn có thể play ở web khác.
+- Một số CDN node như st11 hoạt động, st10 không.
+- Có khả năng hạ tầng/CDN IkiSoda đang không ổn định hoặc node cụ thể gặp sự cố.
+- Không nên reset catalog/quét full ngay khi site không play ổn định vì sẽ tạo nhiều RETRY/thiếu dữ liệu.
+
+## Kế hoạch mới nhất của user
+User muốn:
+- Bỏ catalog phim cũ và quét lại từ đầu.
+- Bắt đầu từ trang chủ `https://ikisoda.com`.
+- Không kế thừa 134 phim cũ.
+- Tuy nhiên ngay thời điểm quyết định này, user thử site và báo IkiSoda không play được.
+- Vì vậy hiện tại chưa nên xóa dữ liệu cũ trước khi site/CDN ổn định.
+- Khi site hoạt động bình thường: tạo full rebuild mới từ home, catalog ban đầu = 0.
+- Vẫn áp filter hiện tại.
+- Chỉ verified 1080 mới được catalog.
+- st10/transport lỗi => RETRY_1080, không FAIL.
+- Lưu đầy đủ attempted/retry/error.
+- Pagination có fallback direct URL.
+- Publish theo batch 20 verified.
+- Không force-publish batch <20 chỉ vì pagination abort, trừ khi có chủ đích riêng.
+
+## Filter hiện tại
+Scanner đang loại các nhóm keyword đã được dùng trong các log:
+- solo / solowork
+- anal
+- same_sex / lesbian / lesbian kiss
+- mature_theme / mother / mature woman / stepmother
+- toy / sex toys / toy
+- cross_dressing
+và các nhóm khác đã có trong script.
+Không tự ý thay đổi filter nếu user chưa yêu cầu.
+
+## Resolver 1080
+Một HTML thực tế đã kiểm tra cho media 20160 cho thấy:
+- contentUrl MP4
+- video_id 20160
+- license_code
+- video_url 360p
+- video_alt_url 480p
+- video_alt_url2 720p
+- video_alt_url3 1080p
+- video_alt_url3_text = 1080p
+- video_alt_url3_hd = 1
+Do đó resolver 1080 dựa trên flashvars/license_code là có cơ sở.
+
+## Nguyên tắc tiếp tục
+- Không đoán scanner đã chạy bao nhiêu nếu JSON không ghi retry.
+- Khi user yêu cầu kiểm tra GitHub: kiểm tra trực tiếp repo.
+- Sau mọi thay đổi code: compile/build/test và kiểm tra log/status thực tế trước khi báo hoàn thành.
+- Không báo “đã chạy/deploy thành công” nếu chưa xác minh.
+- Khi sửa scanner, ưu tiên sửa một file .py nếu user yêu cầu, không bắt user thay cả zip.
+- Giữ checkpoint/resume.
+- Khi mất mạng: chờ/retry thay vì kết thúc ngay nếu có thể.
+- GitHub push lỗi phải retry khi kết nối lại.
+- Không để lỗi CDN biến thành SKIP/false.
+- Không để lỗi pagination làm mất progress.
