@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "resolverType": "youtube_channel",
+  "description": "Canonical IvyPlay YouTube Channel Resolver contract. Add-ons may provide only standard Stremio fields; IvyPlay enriches missing YouTube metadata through the resolver.",
+  "channel": {
+    "channelId": "string",
+    "handle": "string|null",
+    "name": "string",
+    "displayName": "string|null",
+    "avatar": "string|null",
+    "banner": "string|null",
+    "description": "string|null",
+    "subscriberCount": "number|null"
+  },
+  "home": {
+    "sections": [
+      {
+        "id": "string",
+        "title": "string",
+        "type": "featured|videos|shorts|live|playlists|custom",
+        "items": ["youtube item ids in source order"]
+      }
+    ]
+  },
+  "videos": [
+    {
+      "videoId": "string",
+      "title": "string",
+      "url": "string",
+      "thumbnail": "string|null",
+      "duration": "number|null",
+      "uploadDate": "string|null",
+      "viewCount": "number|null",
+      "channelId": "string|null",
+      "channelName": "string|null",
+      "contentType": "youtube_video"
+    }
+  ],
+  "shorts": [],
+  "live": [],
+  "playlists": [
+    {
+      "playlistId": "string",
+      "title": "string",
+      "thumbnail": "string|null",
+      "videoIds": []
+    }
+  ],
+  "notes": [
+    "home.sections order is authoritative and must be rendered without IvyPlay re-sorting.",
+    "Missing optional fields must not block rendering.",
+    "A flat video catalog is valid fallback data but is not evidence of the real YouTube Home section order.",
+    "Standard Stremio add-ons do not need to know this schema; IvyPlay maps/enriches them into it."
+  ]
+}
