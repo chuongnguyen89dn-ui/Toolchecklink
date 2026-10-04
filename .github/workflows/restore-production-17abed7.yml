@@ -1,0 +1,23 @@
+name: Restore YouTube production baseline
+on:
+  push:
+    paths:
+      - '.github/workflows/restore-production-17abed7.yml'
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore production server baseline
+        run: |
+          git checkout 17abed703f5cb2100579c8f222558e588d714db2 -- youtube-khoai-service/server.js
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add youtube-khoai-service/server.js
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(youtube): restore pre-SocialPlug production playback baseline"
+          git push
