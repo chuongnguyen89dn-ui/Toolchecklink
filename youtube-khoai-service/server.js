@@ -174,13 +174,6 @@ app.get("/catalog/movie/khoai-lang-thang/:extra.json",(_,r)=>r.json({metas}));
 app.get("/catalog/movie/hoa-ban-food.json",async(_,r)=>{try{r.json({metas:await loadHoa()})}catch(e){console.error("[HOABAN-CATALOG-FAIL]",e.message);r.status(502).json({metas:[],error:e.message})}});
 app.get("/catalog/movie/hoa-ban-food/:extra.json",async(_,r)=>{try{r.json({metas:await loadHoa()})}catch(e){console.error("[HOABAN-CATALOG-FAIL]",e.message);r.status(502).json({metas:[],error:e.message})}});
 app.get("/hoaban/refresh",async(_,r)=>{try{const x=await loadHoa(true);r.json({ok:true,videos:x.length})}catch(e){r.status(502).json({ok:false,error:e.message})}});
-app.get("/catalog/movie/bom-bom-vlog.json",async(_,r)=>{try{r.json({metas:await loadExtra("bombom")})}catch(e){r.status(502).json({metas:[],error:e.message})}});
-app.get("/catalog/movie/bom-bom-vlog/:extra.json",async(_,r)=>{try{r.json({metas:await loadExtra("bombom")})}catch(e){r.status(502).json({metas:[],error:e.message})}});
-app.get("/bombom/refresh",async(_,r)=>{try{const x=await loadExtra("bombom",true);r.json({ok:true,videos:x.length,channelId:extraState.get("bombom")?.channelId})}catch(e){r.status(502).json({ok:false,error:e.message})}});
-app.get("/catalog/movie/sang-vlog.json",async(_,r)=>{try{r.json({metas:await loadExtra("sang")})}catch(e){r.status(502).json({metas:[],error:e.message})}});
-app.get("/catalog/movie/sang-vlog/:extra.json",async(_,r)=>{try{r.json({metas:await loadExtra("sang")})}catch(e){r.status(502).json({metas:[],error:e.message})}});
-app.get("/sang/refresh",async(_,r)=>{try{const x=await loadExtra("sang",true);r.json({ok:true,videos:x.length,channelId:extraState.get("sang")?.channelId})}catch(e){r.status(502).json({ok:false,error:e.message})}});
-
 for(const c of EXTRA_CHANNELS){
  app.get("/catalog/movie/"+c.catalog+".json",async(_,r)=>{try{r.json({metas:await loadExtra(c)})}catch(e){r.status(502).json({metas:[],error:e.message})}});
  app.get("/catalog/movie/"+c.catalog+"/:extra.json",async(_,r)=>{try{r.json({metas:await loadExtra(c)})}catch(e){r.status(502).json({metas:[],error:e.message})}});
