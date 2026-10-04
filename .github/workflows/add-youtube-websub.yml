@@ -78,3 +78,5 @@ app.post("/youtube/websub",express.text({type:["application/atom+xml","applicati
           git rm .github/workflows/add-youtube-websub.yml
           git commit -m "feat(youtube): add WebSub channel auto updates"
           git push
+
+# trigger
