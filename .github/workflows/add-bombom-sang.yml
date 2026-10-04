@@ -1,0 +1,69 @@
+name: Add BomBom and Sang catalogs
+on:
+  push:
+    paths: ['.github/workflows/add-bombom-sang.yml']
+permissions: {contents: write}
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: python
+        run: |
+          from pathlib import Path
+          p=Path("youtube-khoai-service/server.js"); s=p.read_text()
+          needle='const manifest={id:'
+          assert needle in s
+          generic=r'''
+const EXTRA_CHANNELS=[
+  {key:"bombom",prefix:"bombom_",catalog:"bom-bom-vlog",name:"BomBom Vlog",handle:"@bombomvlog0310",url:"https://www.youtube.com/@bombomvlog0310/videos"},
+  {key:"sang",prefix:"sang_",catalog:"sang-vlog",name:"Sang vlog",handle:"@sangvlog9",url:"https://www.youtube.com/@sangvlog9/videos"}
+];
+const extraState=new Map(EXTRA_CHANNELS.map(c=>[c.key,{metas:[],byId:new Map(),load:null,loadedAt:0,channelId:null}]));
+async function loadExtra(c,force=false){
+  const st=extraState.get(c.key);
+  if(!force&&st.metas.length&&Date.now()-st.loadedAt<24*60*60*1000)return st.metas;
+  if(st.load)return st.load;
+  st.load=(async()=>{
+    console.log("["+c.key.toUpperCase()+"-SCAN] start",c.url);
+    const info=await ytdlp(c.url,{dumpSingleJson:true,flatPlaylist:true,noWarnings:true,ignoreErrors:true},{timeout:180000});
+    const entries=Array.isArray(info.entries)?info.entries:[];
+    st.channelId=info.channel_id||info.channelId||info.uploader_id||null;
+    const seen=new Set();
+    st.metas=entries.filter(x=>x&&x.id&&!seen.has(x.id)&&seen.add(x.id)).map(x=>({id:c.prefix+x.id,type:"movie",name:x.title||x.id,poster:x.thumbnail||("https://i.ytimg.com/vi/"+x.id+"/hqdefault.jpg"),posterShape:"landscape",background:"https://i.ytimg.com/vi/"+x.id+"/maxresdefault.jpg",description:c.name,runtime:x.duration?Math.round(x.duration/60)+" min":undefined}));
+    st.byId=new Map(st.metas.map(x=>[x.id,x]));st.loadedAt=Date.now();
+    console.log("["+c.key.toUpperCase()+"-SCAN] done videos="+st.metas.length+" channelId="+(st.channelId||"unknown"));
+    return st.metas;
+  })().finally(()=>{st.load=null});return st.load;
+}
+'''
+          s=s.replace(needle,generic+"\n"+needle,1)
+          s=s.replace('idPrefixes:["khoai_","hoaban_"]},{name:"stream",types:["movie"],idPrefixes:["khoai_","hoaban_"]}', 'idPrefixes:["khoai_","hoaban_","bombom_","sang_"]},{name:"stream",types:["movie"],idPrefixes:["khoai_","hoaban_","bombom_","sang_"]}',1)
+          s=s.replace('idPrefixes:["khoai_","hoaban_"],catalogs:[{type:"movie",id:"khoai-lang-thang",name:"Khoai Lang Thang"},{type:"movie",id:"hoa-ban-food",name:"HOA BAN FOOD"}]', 'idPrefixes:["khoai_","hoaban_","bombom_","sang_"],catalogs:[{type:"movie",id:"khoai-lang-thang",name:"Khoai Lang Thang"},{type:"movie",id:"hoa-ban-food",name:"HOA BAN FOOD"},{type:"movie",id:"bom-bom-vlog",name:"BomBom Vlog"},{type:"movie",id:"sang-vlog",name:"Sang vlog"}]',1)
+          route='app.get("/hoaban/refresh",async(_,r)=>{try{const x=await loadHoa(true);r.json({ok:true,videos:x.length})}catch(e){r.status(502).json({ok:false,error:e.message})}});'
+          assert route in s
+          add=r'''
+for(const c of EXTRA_CHANNELS){
+  app.get("/catalog/movie/"+c.catalog+".json",async(_,r)=>{try{r.json({metas:await loadExtra(c)})}catch(e){console.error("["+c.key.toUpperCase()+"-CATALOG-FAIL]",e.message);r.status(502).json({metas:[],error:e.message})}});
+  app.get("/catalog/movie/"+c.catalog+"/:extra.json",async(_,r)=>{try{r.json({metas:await loadExtra(c)})}catch(e){r.status(502).json({metas:[],error:e.message})}});
+  app.get("/"+c.key+"/refresh",async(_,r)=>{try{const x=await loadExtra(c,true);r.json({ok:true,videos:x.length,channelId:extraState.get(c.key).channelId})}catch(e){r.status(502).json({ok:false,error:e.message})}});
+}
+'''
+          s=s.replace(route,route+"\n"+add,1)
+          old='app.get("/meta/movie/:id.json",async(q,r)=>{let m=byId.get(q.params.id);if(!m&&q.params.id.startsWith("hoaban_")){try{await loadHoa();m=hoaById.get(q.params.id)}catch(e){console.error("[HOABAN-META-FAIL]",e.message)}}return m?r.json({meta:m}):r.status(404).json({meta:null})});'
+          new='app.get("/meta/movie/:id.json",async(q,r)=>{let m=byId.get(q.params.id);if(!m&&q.params.id.startsWith("hoaban_")){try{await loadHoa();m=hoaById.get(q.params.id)}catch(e){console.error("[HOABAN-META-FAIL]",e.message)}}if(!m){for(const c of EXTRA_CHANNELS){if(q.params.id.startsWith(c.prefix)){try{await loadExtra(c);m=extraState.get(c.key).byId.get(q.params.id)}catch(e){console.error("["+c.key.toUpperCase()+"-META-FAIL]",e.message)}break}}}return m?r.json({meta:m}):r.status(404).json({meta:null})});'
+          assert old in s;s=s.replace(old,new,1)
+          old2='const id=p.startsWith("khoai_")?p.slice(6):p.startsWith("hoaban_")?p.slice(7):"";'
+          new2='const id=p.startsWith("khoai_")?p.slice(6):p.startsWith("hoaban_")?p.slice(7):p.startsWith("bombom_")?p.slice(7):p.startsWith("sang_")?p.slice(5):"";'
+          assert old2 in s;s=s.replace(old2,new2,1)
+          old3='loadHoa().catch(e=>console.error("[HOABAN-SCAN-FAIL]",e.message));setTimeout(()=>subscribeYouTubePush()'
+          new3='loadHoa().catch(e=>console.error("[HOABAN-SCAN-FAIL]",e.message));for(const c of EXTRA_CHANNELS)loadExtra(c).catch(e=>console.error("["+c.key.toUpperCase()+"-SCAN-FAIL]",e.message));setTimeout(()=>subscribeYouTubePush()'
+          assert old3 in s;s=s.replace(old3,new3,1)
+          p.write_text(s)
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add youtube-khoai-service/server.js
+          git rm .github/workflows/add-bombom-sang.yml
+          git commit -m "feat(youtube): add BomBom and Sang video catalogs"
+          git push
