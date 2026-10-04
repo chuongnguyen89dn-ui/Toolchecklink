@@ -1,6 +1,9 @@
 name: Restore SocialPlug playback
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-socialplug-playback.yml'
 permissions:
   contents: write
 jobs:
