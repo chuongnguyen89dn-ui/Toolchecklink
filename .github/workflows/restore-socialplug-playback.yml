@@ -1,0 +1,59 @@
+name: Restore SocialPlug playback
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Patch production playback to SocialPlug
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path("youtube-khoai-service/server.js")
+          s=p.read_text()
+          s=s.replace('version:"3.12.3"','version:"3.13.0"')
+          marker='app.get("/socialplug/:id",async(q,r)=>{try{const x=await socialPlug(q.params.id);r.set("Cache-Control","no-store");r.json(x)}catch(e){console.error("[SOCIALPLUG-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}});'
+          insert=marker+'''
+          const spPlayCache=new Map(),spPlayFlight=new Map();
+          async function resolveSocialPlay(id){
+            const hit=spPlayCache.get(id);if(hit&&hit.expires>Date.now())return hit;
+            if(spPlayFlight.has(id))return spPlayFlight.get(id);
+            const p=(async()=>{
+              const x=await socialPlug(id);
+              const candidates=x.muxed.filter(v=>v.url).sort((a,b)=>(+b.quality||0)-(+a.quality||0));
+              if(!candidates.length)throw Error("SocialPlug returned no muxed playable URL");
+              const best=candidates[0],out={url:best.url,quality:+best.quality||best.quality,itag:best.itag,provider:"socialplug",expires:Date.now()+10*60*1000};
+              spPlayCache.set(id,out);
+              console.log("[SOCIALPLUG-PLAY-SELECT]",id,"quality="+out.quality+"p","itag="+out.itag);
+              return out;
+            })().finally(()=>spPlayFlight.delete(id));
+            spPlayFlight.set(id,p);return p;
+          }'''
+          if 'async function resolveSocialPlay(id)' not in s:
+            s=s.replace(marker,insert)
+          s=re.sub(r'app\.get\("/play/:id/:quality\.mp4"[\s\S]*?\}\}\);\napp\.get\("/catalog/movie/khoai-lang-thang\.json"',
+          '''app.get("/play/:id/:quality.mp4",async(q,r)=>{try{const quality=String(q.params.quality);if(quality!=="auto")return r.status(400).json({error:"Production playback is SocialPlug AUTO only"});const x=await resolveSocialPlay(q.params.id);console.log("[SOCIALPLUG-PLAY-REDIRECT]",q.params.id,"quality="+x.quality+"p","itag="+x.itag);r.set({"Cache-Control":"no-store","Access-Control-Allow-Origin":"*","Location":x.url});return r.status(302).end()}catch(e){console.error("[SOCIALPLUG-PLAY-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}});
+          app.get("/catalog/movie/khoai-lang-thang.json"''',s,count=1)
+          s=s.replace('title:"AUTO stable • adaptive repair pending"','title:"SocialPlug • AUTO"')
+          s=re.sub(r'app\.get\("/resolve/:id"[\s\S]*?\}\}\);\napp\.get\("/play/:id/auto\.mp4"[\s\S]*?\}\}\);',
+          '''app.get("/resolve/:id",async(q,r)=>{try{const x=await resolveSocialPlay(q.params.id);r.set("Cache-Control","no-store");r.json({videoId:q.params.id,provider:x.provider,quality:x.quality,itag:x.itag,url:x.url})}catch(e){console.error("[SOCIALPLUG-RESOLVE-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}});
+          app.get("/play/:id/auto.mp4",async(q,r)=>{try{const x=await resolveSocialPlay(q.params.id);console.log("[SOCIALPLUG-PLAY-REDIRECT]",q.params.id,"quality="+x.quality+"p","itag="+x.itag);r.set({"Cache-Control":"no-store","Access-Control-Allow-Origin":"*","Location":x.url});r.status(302).end()}catch(e){console.error("[SOCIALPLUG-PLAY-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}});''',s,count=1)
+          s=re.sub(r'setTimeout\(async\(\)=>\{try\{const x=await resolveAuto\("B1qT38bVsXc"\)[\s\S]*?\},1500\);','',s,count=1)
+          s=re.sub(r'setTimeout\(async\(\)=>\{try\{const x=await resolveAuto\("AjSxpi8E9WE"\)[\s\S]*?\},4500\);','',s,count=1)
+          p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add youtube-khoai-service/server.js
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(youtube): restore SocialPlug-only production playback"
+          git push
