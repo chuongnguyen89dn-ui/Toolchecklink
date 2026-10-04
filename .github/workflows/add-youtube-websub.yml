@@ -1,0 +1,80 @@
+name: Add YouTube WebSub auto update
+on:
+  push:
+    paths:
+      - '.github/workflows/add-youtube-websub.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch addon
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path("youtube-khoai-service/server.js")
+          s=p.read_text()
+          marker='app.get("/",(_,r)=>r.json({ok:true,name:manifest.name,version:manifest.version,videos:metas.length,cache:cache.size}));'
+          assert marker in s
+          block=r'''
+const YT_CHANNELS={
+  "UCZE88kYvCKUKjM-G0uc8Duw":{key:"khoai",url:"https://www.youtube.com/@khoailangthang/videos"},
+  "UCBhgBmuPFbLLxnejr09lnAQ":{key:"hoaban",url:HOA_URL}
+};
+const YT_HUB="https://pubsubhubbub.appspot.com/subscribe";
+async function refreshChannel(channelId){
+  const ch=YT_CHANNELS[channelId];if(!ch)return;
+  console.log("[YT-PUSH-REFRESH]",channelId,ch.key);
+  if(ch.key==="hoaban"){await loadHoa(true);return}
+  const info=await ytdlp(ch.url,{dumpSingleJson:true,flatPlaylist:true,noWarnings:true,ignoreErrors:true},{timeout:180000});
+  const entries=Array.isArray(info.entries)?info.entries:[];
+  let added=0;
+  for(const x of entries){
+    if(!x?.id)continue;
+    const id="khoai_"+x.id;if(byId.has(id))continue;
+    const m={id,type:"movie",name:x.title||x.id,poster:x.thumbnail||("https://i.ytimg.com/vi/"+x.id+"/hqdefault.jpg"),posterShape:"landscape",background:"https://i.ytimg.com/vi/"+x.id+"/maxresdefault.jpg",description:"Khoai Lang Thang / Food & Travel",runtime:x.duration?Math.round(x.duration/60)+" min":undefined};
+    metas.unshift(m);byId.set(id,m);added++;
+  }
+  console.log("[YT-PUSH-UPDATED]",ch.key,"added="+added,"videos="+metas.length);
+}
+async function subscribeYouTubePush(){
+  const base=process.env.RENDER_EXTERNAL_URL||"https://khoai-nuvio-addon.onrender.com";
+  for(const channelId of Object.keys(YT_CHANNELS)){
+    try{
+      const body=new URLSearchParams({"hub.callback":base+"/youtube/websub","hub.mode":"subscribe","hub.topic":"https://www.youtube.com/feeds/videos.xml?channel_id="+channelId,"hub.verify":"async"});
+      const x=await fetch(YT_HUB,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body,signal:timeout(10000)});
+      console.log("[YT-PUSH-SUBSCRIBE]",channelId,x.status);
+    }catch(e){console.error("[YT-PUSH-SUBSCRIBE-FAIL]",channelId,e.message)}
+  }
+}
+app.get("/youtube/websub",(q,r)=>{
+  const challenge=q.query["hub.challenge"];
+  console.log("[YT-PUSH-VERIFY]",q.query["hub.mode"]||"",q.query["hub.topic"]||"");
+  if(challenge!==undefined)return r.status(200).type("text/plain").send(String(challenge));
+  r.status(400).send("missing challenge");
+});
+app.post("/youtube/websub",express.text({type:["application/atom+xml","application/xml","text/xml","*/*"],limit:"256kb"}),(q,r)=>{
+  const body=String(q.body||"");
+  const videoId=(body.match(/<yt:videoId>([^<]+)<\/yt:videoId>/)||[])[1];
+  const channelId=(body.match(/<yt:channelId>([^<]+)<\/yt:channelId>/)||[])[1];
+  console.log("[YT-PUSH]",channelId||"unknown",videoId||"unknown");
+  r.status(204).end();
+  if(channelId&&YT_CHANNELS[channelId])refreshChannel(channelId).catch(e=>console.error("[YT-PUSH-REFRESH-FAIL]",channelId,e.message));
+});
+'''
+          s=s.replace(marker,block+"\n"+marker)
+          old='loadHoa().catch(e=>console.error("[HOABAN-SCAN-FAIL]",e.message));setTimeout(async()=>'
+          new='loadHoa().catch(e=>console.error("[HOABAN-SCAN-FAIL]",e.message));setTimeout(()=>subscribeYouTubePush().catch(e=>console.error("[YT-PUSH-INIT-FAIL]",e.message)),8000);setInterval(()=>subscribeYouTubePush().catch(e=>console.error("[YT-PUSH-RENEW-FAIL]",e.message)),24*60*60*1000);setTimeout(async()=>'
+          assert old in s
+          s=s.replace(old,new,1)
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add youtube-khoai-service/server.js
+          git rm .github/workflows/add-youtube-websub.yml
+          git commit -m "feat(youtube): add WebSub channel auto updates"
+          git push
