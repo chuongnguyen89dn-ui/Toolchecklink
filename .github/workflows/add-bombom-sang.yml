@@ -67,3 +67,5 @@ for(const c of EXTRA_CHANNELS){
           git rm .github/workflows/add-bombom-sang.yml
           git commit -m "feat(youtube): add BomBom and Sang video catalogs"
           git push
+
+# trigger
