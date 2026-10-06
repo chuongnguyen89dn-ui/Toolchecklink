@@ -180,6 +180,30 @@ for(const c of EXTRA_CHANNELS){
  app.get("/"+c.key+"/refresh",async(_,r)=>{try{const x=await loadExtra(c,true);r.json({ok:true,videos:x.length,channelId:extraState.get(c.key).channelId})}catch(e){r.status(502).json({ok:false,error:e.message})}});
 }
 app.get("/meta/movie/:id.json",async(q,r)=>{let m=byId.get(q.params.id);if(!m&&q.params.id.startsWith("hoaban_")){try{await loadHoa();m=hoaById.get(q.params.id)}catch(e){console.error("[HOABAN-META-FAIL]",e.message)}}if(!m){for(const c of EXTRA_CHANNELS){if(q.params.id.startsWith(c.prefix)){try{await loadExtra(c);m=extraState.get(c.key).byId.get(q.params.id)}catch(e){}break}}}return m?r.json({meta:m}):r.status(404).json({meta:null})});
+async function directYouTubeFormats(id){
+  const info=await ytdlp("https://www.youtube.com/watch?v="+id,{
+    dumpSingleJson:true,noWarnings:true,skipDownload:true,
+    extractorArgs:"youtube:player_client=visionos"
+  },{timeout:60000});
+  const fs=(info.formats||[]).filter(f=>f&&f.url);
+  const video=fs.filter(f=>f.vcodec&&f.vcodec!=="none"&&(!f.acodec||f.acodec==="none"))
+    .sort((a,b)=>(b.height||0)-(a.height||0)||(b.tbr||0)-(a.tbr||0));
+  const audio=fs.filter(f=>f.acodec&&f.acodec!=="none"&&(!f.vcodec||f.vcodec==="none"))
+    .sort((a,b)=>(b.abr||b.tbr||0)-(a.abr||a.tbr||0));
+  const muxed=fs.filter(f=>f.vcodec&&f.vcodec!=="none"&&f.acodec&&f.acodec!=="none")
+    .sort((a,b)=>(b.height||0)-(a.height||0)||(b.tbr||0)-(a.tbr||0));
+  return {
+    id,title:info.title||id,
+    muxed:muxed.slice(0,8).map(f=>({formatId:f.format_id,height:f.height,ext:f.ext,vcodec:f.vcodec,acodec:f.acodec,url:f.url})),
+    video:video.slice(0,12).map(f=>({formatId:f.format_id,height:f.height,ext:f.ext,vcodec:f.vcodec,url:f.url})),
+    audio:audio.slice(0,8).map(f=>({formatId:f.format_id,ext:f.ext,abr:f.abr,acodec:f.acodec,url:f.url}))
+  };
+}
+app.get("/direct-test/:id",async(q,r)=>{try{
+  const x=await directYouTubeFormats(q.params.id);
+  console.log("[DIRECT-YT-TEST]",q.params.id,"muxed="+x.muxed.length,"video="+x.video.length,"audio="+x.audio.length,"max="+Math.max(0,...x.video.map(v=>v.height||0),...x.muxed.map(v=>v.height||0)));
+  r.set("Cache-Control","no-store");r.json(x);
+}catch(e){console.error("[DIRECT-YT-TEST-FAIL]",q.params.id,String(e.stderr||e.message||e).slice(0,1200));r.status(502).json({error:String(e.stderr||e.message||e).slice(0,2000)})}});
 app.get("/stream/movie/:id.json",(q,r)=>{const p=q.params.id;const id=p.startsWith("khoai_")?p.slice(6):p.startsWith("hoaban_")?p.slice(7):p.startsWith("bombom_")?p.slice(7):p.startsWith("sang_")?p.slice(5):"";return id?r.json({streams:[{name:"YouTube • AUTO",title:"AUTO stable • adaptive repair pending",url:`${q.protocol}://${q.get("host")}/play/${id}/auto.mp4`,behaviorHints:{notWebReady:true}}]}):r.json({streams:[]})});
 app.get("/adaptive/:id/master.m3u8",async(q,r)=>{try{const id=q.params.id;const qualities=[["2160",18000000],["1440",10000000],["1080",6000000],["720",3000000],["480",1500000],["360",800000]];const out=["#EXTM3U","#EXT-X-VERSION:3","#EXT-X-INDEPENDENT-SEGMENTS"];for(const [quality,bw] of qualities){try{const x=await resolveQuality(id,quality);out.push("#EXT-X-STREAM-INF:BANDWIDTH="+bw+",AVERAGE-BANDWIDTH="+Math.round(bw*.8)+",RESOLUTION="+({2160:"3840x2160",1440:"2560x1440",1080:"1920x1080",720:"1280x720",480:"854x480",360:"640x360"})[quality]+",NAME=\""+quality+"p\"");out.push(x.url)}catch(e){console.log("[ADAPTIVE-MISS]",id,quality+"p",e.message)}}if(out.length===3)throw Error("No adaptive variants");console.log("[ADAPTIVE-MASTER]",id,"variants="+((out.length-3)/2));r.set({"Content-Type":"application/vnd.apple.mpegurl","Cache-Control":"no-store","Access-Control-Allow-Origin":"*"});r.send(out.join("\n")+"\n")}catch(e){console.error("[ADAPTIVE-FAIL]",q.params.id,e.message);r.status(502).json({error:e.message})}});
 app.get("/formats/:id",async(q,r)=>{const qualities=["2160","1440","1080","720","480","360"];const formats=[];for(const quality of qualities){try{const x=await resolveQuality(q.params.id,quality);formats.push({quality:Number(quality),reportedQuality:Number(x.reportedQuality)||x.reportedQuality,url:x.url,cdn:x.cdn})}catch(e){console.log("[FORMAT-MISS]",q.params.id,quality+"p",e.message)}}r.set("Cache-Control","no-store");r.json({videoId:q.params.id,preferred:"highest",formats})});
