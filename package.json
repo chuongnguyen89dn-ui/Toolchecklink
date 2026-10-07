@@ -1,0 +1,1 @@
+{"name":"film4k-hls-adapter","version":"1.0.0","private":true,"main":"film4k_adapter.js","scripts":{"start":"node film4k_adapter.js"},"dependencies":{"express":"^4.21.2"},"engines":{"node":">=22"}}
