@@ -18,6 +18,26 @@ function extract(url,client){
 const express=require("express");
 const router=express.Router();
 const ID=/^[A-Za-z0-9_-]{11}$/;
+
+// Diagnose Render's outbound YouTube access independently of yt-dlp and FFmpeg.
+router.get("/diagnostics",async(req,res)=>{
+ const id="B1qT38bVsXc";
+ const targets=[
+  ["watch","https://www.youtube.com/watch?v="+id],
+  ["embed","https://www.youtube.com/embed/"+id],
+  ["oembed","https://www.youtube.com/oembed?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D"+id+"&format=json"]
+ ];
+ const results=[];
+ for(const [name,url] of targets){
+  try{
+   const response=await fetch(url,{redirect:"follow",headers:{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36"},signal:AbortSignal.timeout(8000)});
+   const body=(await response.text()).slice(0,100000);
+   results.push({name,status:response.status,bytesSample:body.length,hasPlayerResponse:/ytInitialPlayerResponse|playerResponse/.test(body),challenge:/unusual traffic|not a robot|captcha|sign in to confirm|verify you are human/i.test(body)});
+  }catch(e){results.push({name,error:String(e.message||e)})}
+ }
+ console.log("[DIRECT-NET-DIAGNOSTICS]",JSON.stringify(results));
+ res.set("Cache-Control","no-store").json({results});
+});
 router.get("/:id",async(req,res)=>{
  const id=req.params.id;
  if(!ID.test(id))return res.status(400).json({error:"Invalid YouTube ID"});
