@@ -1,6 +1,20 @@
 // Isolated direct YouTube playback experiment. No SaveTube dependency.
 const {spawn}=require("node:child_process");
-const ytdlp=require("youtube-dl-exec");
+// Use the pip-installed yt-dlp (with PO-token plugin), not youtube-dl-exec's bundled binary.
+function extract(url){
+ return new Promise((resolve,reject)=>{
+  const p=spawn("python3",["-m","yt_dlp","--dump-single-json","--skip-download","--no-warnings",url],{stdio:["ignore","pipe","pipe"]});
+  let out="",err="",done=false;
+  const timer=setTimeout(()=>{p.kill("SIGKILL");},60000);
+  p.stdout.on("data",b=>{out+=b.toString();if(out.length>12000000)p.kill("SIGKILL")});
+  p.stderr.on("data",b=>{err=(err+b.toString()).slice(-3000)});
+  p.on("error",e=>{if(!done){done=true;clearTimeout(timer);reject(e)}});
+  p.on("close",code=>{clearTimeout(timer);if(done)return;done=true;
+   if(code!==0)return reject(Error("yt-dlp exit "+code+": "+err));
+   try{resolve(JSON.parse(out))}catch(e){reject(Error("yt-dlp invalid JSON: "+err+" "+e.message))}
+  });
+ });
+}
 const express=require("express");
 const router=express.Router();
 const ID=/^[A-Za-z0-9_-]{11}$/;
@@ -9,9 +23,7 @@ router.get("/:id",async(req,res)=>{
  if(!ID.test(id))return res.status(400).json({error:"Invalid YouTube ID"});
  let proc;
  try{
-  const info=await ytdlp("https://www.youtube.com/watch?v="+id,{
-   dumpSingleJson:true,skipDownload:true,noWarnings:true
-  },{timeout:60000});
+  const info=await extract("https://www.youtube.com/watch?v="+id);
   const formats=(info.formats||[]).filter(f=>f.url&&/^https:/.test(f.url));
   const video=formats.filter(f=>f.format_id==="136"&&f.vcodec&&f.vcodec!=="none"&&f.ext==="mp4")
     .sort((a,b)=>(b.height||0)-(a.height||0))[0];
