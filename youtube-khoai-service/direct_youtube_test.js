@@ -10,15 +10,14 @@ router.get("/:id",async(req,res)=>{
  let proc;
  try{
   const info=await ytdlp("https://www.youtube.com/watch?v="+id,{
-   dumpSingleJson:true,skipDownload:true,noWarnings:true,
-   extractorArgs:"youtube:player_client=visionos"
+   dumpSingleJson:true,skipDownload:true,noWarnings:true
   },{timeout:60000});
   const formats=(info.formats||[]).filter(f=>f.url&&/^https:/.test(f.url));
   const video=formats.filter(f=>f.format_id==="136"&&f.vcodec&&f.vcodec!=="none"&&f.ext==="mp4")
     .sort((a,b)=>(b.height||0)-(a.height||0))[0];
   const audio=formats.filter(f=>f.format_id==="140"&&f.acodec&&f.acodec!=="none"&&f.ext==="m4a")
     .sort((a,b)=>(b.abr||0)-(a.abr||0))[0];
-  if(!video||!audio)return res.status(502).json({error:"Missing separate video/audio formats"});
+  if(!video||!audio){console.error("[DIRECT-FORMATS-MISSING]",id,"available",(info.formats||[]).map(f=>f.format_id+":"+f.ext+":"+(f.height||0)).join(",").slice(0,1200));return res.status(502).json({error:"Missing separate video/audio formats"});}
   console.log("[DIRECT-YTDLP]",id,"video",video.format_id,video.height,"audio",audio.format_id);
   const args=["-hide_banner","-loglevel","error","-nostdin",
     "-user_agent","Mozilla/5.0","-i",video.url,
