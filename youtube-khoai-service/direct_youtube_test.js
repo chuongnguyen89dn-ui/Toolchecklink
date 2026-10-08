@@ -112,6 +112,32 @@ router.get("/:id",async(req,res)=>{
   res.on("close",()=>{if(proc&&!proc.killed)proc.kill("SIGTERM")});
  }catch(e){console.error("[DIRECT-YTDLP-FAIL]",id,String(e.stderr||e.message||e).slice(0,700));if(!res.headersSent)res.status(502).json({error:"Direct resolver failed"})}
 });
+// One-shot network matrix on startup: identify which official YouTube origins are
+// reachable before considering any player changes. Never log cookies or signed URLs.
+setTimeout(async()=>{
+ const id="B1qT38bVsXc";
+ const targets=[
+  ["watch_www","https://www.youtube.com/watch?v="+id],
+  ["watch_mobile","https://m.youtube.com/watch?v="+id],
+  ["watch_nocookie","https://www.youtube-nocookie.com/embed/"+id],
+  ["embed_www","https://www.youtube.com/embed/"+id],
+  ["player_api","https://www.youtube.com/youtubei/v1/player?prettyPrint=false"],
+  ["player_api_googleapis","https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false"]
+ ];
+ const results=await Promise.all(targets.map(async([name,url])=>{
+  try{
+   const response=await fetch(url,{method:name.startsWith("player_api")?"POST":"GET",
+    headers:{"User-Agent":"Mozilla/5.0","Content-Type":"application/json"},
+    body:name.startsWith("player_api")?JSON.stringify({context:{client:{clientName:"WEB",clientVersion:"2.20261001.00.00"}},videoId:id}):undefined,
+    signal:AbortSignal.timeout(9000)});
+   const sample=(await response.text()).slice(0,1500);
+   return {name,status:response.status,contentType:response.headers.get("content-type"),
+    challenge:/<title>Sorry|unusual traffic|captcha|not a robot/i.test(sample),
+    json:sample.trimStart().startsWith("{")};
+  }catch(e){return {name,error:String(e.message||e).slice(0,120)}}
+ }));
+ console.log("[DIRECT-YOUTUBE-ORIGIN-MATRIX]",JSON.stringify(results));
+},5000).unref();
 // Run the diagnostic on the server itself; no manual user test required.
 setTimeout(async()=>{
  try{
