@@ -1,9 +1,9 @@
 // Isolated direct YouTube playback experiment. No SaveTube dependency.
 const {spawn}=require("node:child_process");
 // Use the pip-installed yt-dlp (with PO-token plugin), not youtube-dl-exec's bundled binary.
-function extract(url){
+function extract(url,client){
  return new Promise((resolve,reject)=>{
-  const p=spawn("python3",["-m","yt_dlp","--dump-single-json","--skip-download","--no-warnings",url],{stdio:["ignore","pipe","pipe"]});
+  const p=spawn("python3",["-m","yt_dlp","--dump-single-json","--skip-download","--no-warnings","--extractor-args","youtube:player_client="+client,url],{stdio:["ignore","pipe","pipe"]});
   let out="",err="",done=false;
   const timer=setTimeout(()=>{p.kill("SIGKILL");},60000);
   p.stdout.on("data",b=>{out+=b.toString();if(out.length>12000000)p.kill("SIGKILL")});
@@ -23,7 +23,12 @@ router.get("/:id",async(req,res)=>{
  if(!ID.test(id))return res.status(400).json({error:"Invalid YouTube ID"});
  let proc;
  try{
-  const info=await extract("https://www.youtube.com/watch?v="+id);
+  let info, failures=[];
+  for(const client of ["android_vr","web_safari","web"]){
+   try{info=await extract("https://www.youtube.com/watch?v="+id,client);console.log("[DIRECT-CLIENT-OK]",id,client);break}
+   catch(e){const msg=String(e.message||e).slice(0,550);failures.push({client,error:msg});console.error("[DIRECT-CLIENT-FAIL]",id,client,msg)}
+  }
+  if(!info)return res.status(502).json({error:"YouTube extraction failed on Render",clients:failures.map(x=>x.client)});
   const formats=(info.formats||[]).filter(f=>f.url&&/^https:/.test(f.url));
   const video=formats.filter(f=>f.format_id==="136"&&f.vcodec&&f.vcodec!=="none"&&f.ext==="mp4")
     .sort((a,b)=>(b.height||0)-(a.height||0))[0];
