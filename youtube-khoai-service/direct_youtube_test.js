@@ -38,6 +38,21 @@ router.get("/diagnostics",async(req,res)=>{
  console.log("[DIRECT-NET-DIAGNOSTICS]",JSON.stringify(results));
  res.set("Cache-Control","no-store").json({results});
 });
+// Reachability check for the user-owned Cloudflare Worker (diagnostics only).
+router.get("/cloudflare-diagnostics",async(req,res)=>{
+ const url="https://nuvio-youtube-direct-probe.chuongnguyen89dn-2b3.workers.dev/";
+ try{
+  const response=await fetch(url,{signal:AbortSignal.timeout(12000)});
+  const body=(await response.text()).slice(0,5000);
+  console.log("[DIRECT-CLOUDFLARE-PROBE]",response.status,body.slice(0,1400));
+  res.set("Cache-Control","no-store").status(response.ok?200:502).json({
+   workerHttpStatus:response.status,workerResponse:body.slice(0,3000),mediaVerified:false
+  });
+ }catch(e){
+  console.error("[DIRECT-CLOUDFLARE-PROBE-ERROR]",String(e.message||e));
+  res.status(502).json({error:String(e.message||e),mediaVerified:false});
+ }
+});
 // Independent first-party YouTube Innertube probe via the installed youtubei.js library.
 // This does not contact SaveTube or any third-party resolver.
 router.get("/innertube-diagnostics/:id",async(req,res)=>{
