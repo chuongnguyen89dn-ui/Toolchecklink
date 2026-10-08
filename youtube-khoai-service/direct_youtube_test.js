@@ -43,6 +43,24 @@ router.get("/:id",async(req,res)=>{
  if(!ID.test(id))return res.status(400).json({error:"Invalid YouTube ID"});
  let proc;
  try{
+  // Fast-fail when Render's outbound address is rate-limited by YouTube.
+  // Do not spend three 60-second yt-dlp retries on a known blocked network.
+  let networkStatus;
+  try{
+   const probe=await fetch("https://www.youtube.com/watch?v="+id,{
+    headers:{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36"},
+    signal:AbortSignal.timeout(8000)
+   });
+   networkStatus=probe.status;
+   if(probe.body)await probe.body.cancel();
+  }catch(e){console.error("[DIRECT-NET-PROBE-ERROR]",id,String(e.message||e))}
+  if(networkStatus===429){
+   console.error("[DIRECT-NET-BLOCKED]",id,"YouTube watch HTTP 429; no SaveTube fallback");
+   return res.status(503).set("Retry-After","300").json({
+    error:"Direct YouTube unavailable from Render: YouTube HTTP 429",
+    stage:"youtube_network",youtubeStatus:429,saveTubeUsed:false
+   });
+  }
   let info, failures=[];
   for(const client of ["android_vr","web_safari","web"]){
    try{info=await extract("https://www.youtube.com/watch?v="+id,client);console.log("[DIRECT-CLIENT-OK]",id,client);break}
