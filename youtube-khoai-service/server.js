@@ -4,6 +4,9 @@ const catalog=require("./catalog.json");
 const app=express();
 const {router:film4kRouter}=require("./film4k_adapter");
 app.use("/film4k",film4kRouter);
+// Isolated VLC-validated-style resolver test; production routes remain unchanged.
+app.use("/direct-youtube-test",require("./direct_youtube_test"));
+
 const ytdlp=require("youtube-dl-exec");
 const UA="Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 Version/18.5 Mobile/15E148 Safari/604.1";
 const KEY=Buffer.from("C5D58EF67A7584E4A29F6C35BBC4EB12","hex");
