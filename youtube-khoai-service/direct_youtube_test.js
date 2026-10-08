@@ -38,6 +38,29 @@ router.get("/diagnostics",async(req,res)=>{
  console.log("[DIRECT-NET-DIAGNOSTICS]",JSON.stringify(results));
  res.set("Cache-Control","no-store").json({results});
 });
+// Independent first-party YouTube Innertube probe via the installed youtubei.js library.
+// This does not contact SaveTube or any third-party resolver.
+router.get("/innertube-diagnostics/:id",async(req,res)=>{
+ const id=req.params.id;
+ if(!ID.test(id))return res.status(400).json({error:"Invalid YouTube ID"});
+ try{
+  const {Innertube}=await import("youtubei.js");
+  const yt=await Innertube.create({generate_session_locally:true});
+  const info=await yt.getInfo(id);
+  const data=info.streaming_data||{};
+  const formats=[...(data.formats||[]),...(data.adaptive_formats||[])];
+  const summary={id,playability:info.playability_status?.status||null,formatCount:formats.length,
+   video136:formats.some(f=>String(f.itag)==="136"),audio140:formats.some(f=>String(f.itag)==="140"),
+   formats:formats.slice(0,25).map(f=>({itag:f.itag,mime_type:f.mime_type,hasUrl:!!f.url})),
+   saveTubeUsed:false};
+  console.log("[DIRECT-INNERTUBE]",JSON.stringify(summary));
+  res.set("Cache-Control","no-store").json(summary);
+ }catch(e){
+  const message=String(e.message||e).slice(0,600);
+  console.error("[DIRECT-INNERTUBE-FAIL]",id,message);
+  res.status(502).json({error:message,saveTubeUsed:false});
+ }
+});
 router.get("/:id",async(req,res)=>{
  const id=req.params.id;
  if(!ID.test(id))return res.status(400).json({error:"Invalid YouTube ID"});
