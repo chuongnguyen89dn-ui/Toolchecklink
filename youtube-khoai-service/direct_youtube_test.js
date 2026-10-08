@@ -121,6 +121,6 @@ setTimeout(async()=>{
   const data=info.streaming_data||{};
   const formats=[...(data.formats||[]),...(data.adaptive_formats||[])];
   console.log("[DIRECT-INNERTUBE-SELFTEST]",JSON.stringify({status:info.playability_status?.status||null,count:formats.length,has136:formats.some(f=>String(f.itag)==="136"),has140:formats.some(f=>String(f.itag)==="140"),hasPlayableUrl:formats.some(f=>!!f.url)}));
- }catch(e){console.error("[DIRECT-INNERTUBE-SELFTEST-FAIL]",String(e.message||e).slice(0,700))}
+ }catch(e){console.error("[DIRECT-INNERTUBE-SELFTEST-FAIL]",JSON.stringify({message:String(e.message||e).slice(0,400),status:e.status||e.status_code||e.response?.status||null,body:String(e.response?.body||e.response?.data||e.info||"").slice(0,650)}))}
 },15000).unref();
 module.exports=router;
