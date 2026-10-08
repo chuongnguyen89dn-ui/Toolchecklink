@@ -39,6 +39,7 @@ router.get("/diagnostics",async(req,res)=>{
  res.set("Cache-Control","no-store").json({results});
 });
 // Reachability check for the user-owned Cloudflare Worker (diagnostics only).
+setTimeout(async()=>{try{const r=await fetch("https://nuvio-youtube-direct-probe.chuongnguyen89dn-2b3.workers.dev/",{signal:AbortSignal.timeout(35000)});const t=await r.text();console.log("[CF-PLAYER-TEST]",r.status,t.slice(0,3000));}catch(e){console.error("[CF-PLAYER-TEST-ERROR]",String(e.message||e))}},6000).unref();
 router.get("/cloudflare-diagnostics",async(req,res)=>{
  const url="https://nuvio-youtube-direct-probe.chuongnguyen89dn-2b3.workers.dev/";
  try{
