@@ -112,4 +112,15 @@ router.get("/:id",async(req,res)=>{
   res.on("close",()=>{if(proc&&!proc.killed)proc.kill("SIGTERM")});
  }catch(e){console.error("[DIRECT-YTDLP-FAIL]",id,String(e.stderr||e.message||e).slice(0,700));if(!res.headersSent)res.status(502).json({error:"Direct resolver failed"})}
 });
+// Run the diagnostic on the server itself; no manual user test required.
+setTimeout(async()=>{
+ try{
+  const {Innertube}=await import("youtubei.js");
+  const yt=await Innertube.create({generate_session_locally:true});
+  const info=await yt.getInfo("B1qT38bVsXc");
+  const data=info.streaming_data||{};
+  const formats=[...(data.formats||[]),...(data.adaptive_formats||[])];
+  console.log("[DIRECT-INNERTUBE-SELFTEST]",JSON.stringify({status:info.playability_status?.status||null,count:formats.length,has136:formats.some(f=>String(f.itag)==="136"),has140:formats.some(f=>String(f.itag)==="140"),hasPlayableUrl:formats.some(f=>!!f.url)}));
+ }catch(e){console.error("[DIRECT-INNERTUBE-SELFTEST-FAIL]",String(e.message||e).slice(0,700))}
+},15000).unref();
 module.exports=router;
