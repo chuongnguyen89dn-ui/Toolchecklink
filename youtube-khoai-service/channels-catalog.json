@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-10-12T15:12:24.836Z",
+  "updatedAt": "2026-10-12T15:12:44.328Z",
   "channels": {
     "khoai": {
       "catalogId": "khoai-lang-thang",
@@ -2811,7 +2811,248 @@
       "prefix": "hoaban_",
       "handle": "@HOABANFOOD",
       "channelId": "UCBhgBmuPFbLLxnejr09lnAQ",
-      "videos": []
+      "videos": [
+        {
+          "videoId": "GmXUGTdj4Fo",
+          "title": "GmXUGTdj4Fo",
+          "url": "https://www.youtube.com/watch?v=GmXUGTdj4Fo",
+          "thumbnail": "https://i.ytimg.com/vi/GmXUGTdj4Fo/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "qXX2BL3SovE",
+          "title": "qXX2BL3SovE",
+          "url": "https://www.youtube.com/watch?v=qXX2BL3SovE",
+          "thumbnail": "https://i.ytimg.com/vi/qXX2BL3SovE/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "0om3OGPaeBk",
+          "title": "0om3OGPaeBk",
+          "url": "https://www.youtube.com/watch?v=0om3OGPaeBk",
+          "thumbnail": "https://i.ytimg.com/vi/0om3OGPaeBk/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "gJEqjLpLF-E",
+          "title": "gJEqjLpLF-E",
+          "url": "https://www.youtube.com/watch?v=gJEqjLpLF-E",
+          "thumbnail": "https://i.ytimg.com/vi/gJEqjLpLF-E/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "1PJtzKpx_9U",
+          "title": "1PJtzKpx_9U",
+          "url": "https://www.youtube.com/watch?v=1PJtzKpx_9U",
+          "thumbnail": "https://i.ytimg.com/vi/1PJtzKpx_9U/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "kOEf3R1ssLo",
+          "title": "kOEf3R1ssLo",
+          "url": "https://www.youtube.com/watch?v=kOEf3R1ssLo",
+          "thumbnail": "https://i.ytimg.com/vi/kOEf3R1ssLo/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "fiNU0UjZ1iU",
+          "title": "fiNU0UjZ1iU",
+          "url": "https://www.youtube.com/watch?v=fiNU0UjZ1iU",
+          "thumbnail": "https://i.ytimg.com/vi/fiNU0UjZ1iU/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "c8hG1rw08ak",
+          "title": "c8hG1rw08ak",
+          "url": "https://www.youtube.com/watch?v=c8hG1rw08ak",
+          "thumbnail": "https://i.ytimg.com/vi/c8hG1rw08ak/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "VWy-JpUTcVQ",
+          "title": "VWy-JpUTcVQ",
+          "url": "https://www.youtube.com/watch?v=VWy-JpUTcVQ",
+          "thumbnail": "https://i.ytimg.com/vi/VWy-JpUTcVQ/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "5nkdcZriRR8",
+          "title": "5nkdcZriRR8",
+          "url": "https://www.youtube.com/watch?v=5nkdcZriRR8",
+          "thumbnail": "https://i.ytimg.com/vi/5nkdcZriRR8/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "MbqD5lVM1-8",
+          "title": "MbqD5lVM1-8",
+          "url": "https://www.youtube.com/watch?v=MbqD5lVM1-8",
+          "thumbnail": "https://i.ytimg.com/vi/MbqD5lVM1-8/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "X_oC7C9torQ",
+          "title": "X_oC7C9torQ",
+          "url": "https://www.youtube.com/watch?v=X_oC7C9torQ",
+          "thumbnail": "https://i.ytimg.com/vi/X_oC7C9torQ/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "gNRqlfDkBfE",
+          "title": "gNRqlfDkBfE",
+          "url": "https://www.youtube.com/watch?v=gNRqlfDkBfE",
+          "thumbnail": "https://i.ytimg.com/vi/gNRqlfDkBfE/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "yGsfAoCbmJI",
+          "title": "yGsfAoCbmJI",
+          "url": "https://www.youtube.com/watch?v=yGsfAoCbmJI",
+          "thumbnail": "https://i.ytimg.com/vi/yGsfAoCbmJI/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "NoJxQL0l6ts",
+          "title": "NoJxQL0l6ts",
+          "url": "https://www.youtube.com/watch?v=NoJxQL0l6ts",
+          "thumbnail": "https://i.ytimg.com/vi/NoJxQL0l6ts/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "hFUrMwVtfaE",
+          "title": "hFUrMwVtfaE",
+          "url": "https://www.youtube.com/watch?v=hFUrMwVtfaE",
+          "thumbnail": "https://i.ytimg.com/vi/hFUrMwVtfaE/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "C73klaxFzHE",
+          "title": "C73klaxFzHE",
+          "url": "https://www.youtube.com/watch?v=C73klaxFzHE",
+          "thumbnail": "https://i.ytimg.com/vi/C73klaxFzHE/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "oyv0yALhQgk",
+          "title": "oyv0yALhQgk",
+          "url": "https://www.youtube.com/watch?v=oyv0yALhQgk",
+          "thumbnail": "https://i.ytimg.com/vi/oyv0yALhQgk/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "KpGtorIXOWw",
+          "title": "KpGtorIXOWw",
+          "url": "https://www.youtube.com/watch?v=KpGtorIXOWw",
+          "thumbnail": "https://i.ytimg.com/vi/KpGtorIXOWw/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "OXaRplQERI0",
+          "title": "OXaRplQERI0",
+          "url": "https://www.youtube.com/watch?v=OXaRplQERI0",
+          "thumbnail": "https://i.ytimg.com/vi/OXaRplQERI0/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "dRFcbv4E8r8",
+          "title": "dRFcbv4E8r8",
+          "url": "https://www.youtube.com/watch?v=dRFcbv4E8r8",
+          "thumbnail": "https://i.ytimg.com/vi/dRFcbv4E8r8/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "EirDKNRrN6k",
+          "title": "EirDKNRrN6k",
+          "url": "https://www.youtube.com/watch?v=EirDKNRrN6k",
+          "thumbnail": "https://i.ytimg.com/vi/EirDKNRrN6k/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "NrKk-XdfEWk",
+          "title": "NrKk-XdfEWk",
+          "url": "https://www.youtube.com/watch?v=NrKk-XdfEWk",
+          "thumbnail": "https://i.ytimg.com/vi/NrKk-XdfEWk/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "fROJO7kyrHM",
+          "title": "fROJO7kyrHM",
+          "url": "https://www.youtube.com/watch?v=fROJO7kyrHM",
+          "thumbnail": "https://i.ytimg.com/vi/fROJO7kyrHM/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "CgoojIEKnt0",
+          "title": "CgoojIEKnt0",
+          "url": "https://www.youtube.com/watch?v=CgoojIEKnt0",
+          "thumbnail": "https://i.ytimg.com/vi/CgoojIEKnt0/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "1VnSnQGY1fs",
+          "title": "1VnSnQGY1fs",
+          "url": "https://www.youtube.com/watch?v=1VnSnQGY1fs",
+          "thumbnail": "https://i.ytimg.com/vi/1VnSnQGY1fs/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "lehEASyvpuk",
+          "title": "lehEASyvpuk",
+          "url": "https://www.youtube.com/watch?v=lehEASyvpuk",
+          "thumbnail": "https://i.ytimg.com/vi/lehEASyvpuk/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "veKY5ZqmdGg",
+          "title": "veKY5ZqmdGg",
+          "url": "https://www.youtube.com/watch?v=veKY5ZqmdGg",
+          "thumbnail": "https://i.ytimg.com/vi/veKY5ZqmdGg/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "cfG2PV0vBqM",
+          "title": "cfG2PV0vBqM",
+          "url": "https://www.youtube.com/watch?v=cfG2PV0vBqM",
+          "thumbnail": "https://i.ytimg.com/vi/cfG2PV0vBqM/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        },
+        {
+          "videoId": "bdYSBnr7tJI",
+          "title": "bdYSBnr7tJI",
+          "url": "https://www.youtube.com/watch?v=bdYSBnr7tJI",
+          "thumbnail": "https://i.ytimg.com/vi/bdYSBnr7tJI/hqdefault.jpg",
+          "channel": "HOA BAN FOOD",
+          "posterShape": "landscape"
+        }
+      ]
     },
     "bombom": {
       "catalogId": "bom-bom-vlog",
